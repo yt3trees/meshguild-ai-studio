@@ -1,0 +1,80 @@
+@page "/tools"
+@inject IAgentRegistry AgentRegistry
+
+<PageTitle>MeshGuild AI Studio | Tools</PageTitle>
+
+<div class="tools-page">
+    <div class="tools-inner">
+        <div class="tools-heading">
+            <div>
+                <h1>Tools</h1>
+                <p>実行時にエージェントへ公開される tool と実行境界</p>
+            </div>
+            <span class="milestone-badge">@tools.Count active</span>
+        </div>
+
+        <section class="panel registry-panel">
+            <div class="registry-header">
+                <span>Tool</span><span>Source / agents</span><span>Approval</span><span>Status</span>
+            </div>
+            @if (tools.Count == 0)
+            {
+                <div class="registry-empty">有効な tool はありません。</div>
+            }
+            else
+            {
+                @foreach (var tool in tools)
+                {
+                    <div class="registry-row">
+                        <span class="registry-name-block">
+                            <span class="registry-name">@tool.Name</span>
+                            <span class="registry-desc">@tool.Description</span>
+                        </span>
+                        <span class="registry-name-block">
+                            <span class="registry-source">@tool.Source</span>
+                            <span class="registry-desc">@string.Join(", ", tool.Agents)</span>
+                        </span>
+                        <span class="badge @ApprovalClass(tool.Approval)">@tool.Approval</span>
+                        <span class="registry-status"><span class="status-dot status-dot-on"></span>active</span>
+                    </div>
+                }
+            }
+            <div class="registry-footnote">
+                agent.yaml の harness / skills と Agent 専用 Provider から起動時に解決。run_shell は run workspace に拘束され、実行前に承認を要求します。
+            </div>
+        </section>
+
+        <section class="panel policy-panel">
+            <div class="panel-header">
+                <span>Shell execution boundary</span>
+                <span class="panel-header-sub">Harness / LocalShellExecutor</span>
+            </div>
+            <div class="policy-grid">
+                <div class="policy-col">
+                    <div class="policy-col-label policy-col-label-ok">Workspace</div>
+                    <div class="policy-col-body">confined: true<br />per-run directory<br />output: 128 KiB</div>
+                </div>
+                <div class="policy-col">
+                    <div class="policy-col-label policy-col-label-warn">Approval</div>
+                    <div class="policy-col-body">shell calls: required<br />auto approval: disabled<br />timeout: 15 min</div>
+                </div>
+                <div class="policy-col policy-col-last">
+                    <div class="policy-col-label policy-col-label-danger">Default deny</div>
+                    <div class="policy-col-body">destructive delete<br />network transfer<br />push / elevation</div>
+                </div>
+            </div>
+        </section>
+    </div>
+</div>
+
+@code {
+    private IReadOnlyList<ToolView> tools = Array.Empty<ToolView>();
+
+    protected override void OnInitialized()
+    {
+        tools = AgentRegistry.ListTools();
+    }
+
+    private static string ApprovalClass(string approval)
+        => approval == "required" ? "badge-required" : "badge-none";
+}

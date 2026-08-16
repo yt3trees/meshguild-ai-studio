@@ -1,0 +1,242 @@
+@page "/triggers"
+@using WorkAgents.Core.Abstractions
+@using WorkAgents.Core.Triggers
+@inject ITriggerStore TriggerStore
+
+<PageTitle>MeshGuild AI Studio | Triggers</PageTitle>
+
+<div class="wa-scroll-page">
+    <div class="wa-inner">
+        <div class="wa-head">
+            <div><h1>Triggers</h1><p>ミッションの自動起動と重複ポリシー</p></div>
+            <button class="wa-btn wa-btn-primary wa-btn-sm" type="button" @onclick="() => showCreate = !showCreate">+ トリガーを追加</button>
+        </div>
+
+        @if (showCreate)
+        {
+            <section class="wa-panel wa-mb">
+                <div class="wa-panel-header"><span>新しいトリガー</span></div>
+                <div class="wa-panel-body">
+                    <div class="wa-form-grid">
+                        <div class="wa-field"><label for="trigger-name">名前</label><input id="trigger-name" @bind="newName" /></div>
+                        <div class="wa-field"><label for="trigger-kind">種別</label><select id="trigger-kind" @bind="newKind"><option value="Schedule">Schedule</option><option value="Interval">Interval</option><option value="Event">Event</option></select></div>
+                        <div class="wa-field"><label for="trigger-target">対象</label><input id="trigger-target" @bind="newTarget" /></div>
+                        <div class="wa-field"><label for="trigger-input">入力</label><input id="trigger-input" @bind="newInput" /></div>
+                        <div class="wa-field">
+                            <label for="trigger-cron">@ScheduleLabel</label>
+                            <input id="trigger-cron" @bind="newSchedule" @bind:event="oninput" placeholder="@SchedulePlaceholder" disabled="@(newKind == "Event")" />
+                            @if (!string.IsNullOrEmpty(SchedulePreview))
+                            {
+                                <small class="wa-cell-dim">@SchedulePreview</small>
+                            }
+                        </div>
+                        <div class="wa-field"><label for="trigger-overlap">重複時</label><select id="trigger-overlap" @bind="newOverlap"><option value="Skip">抑止</option><option value="Queue">待機</option><option value="Parallel">並走</option></select></div>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(error)) { <div class="wa-load-error" role="alert">@error</div> }
+                    <div class="wa-form-actions"><button class="wa-btn" type="button" @onclick="() => showCreate = false">キャンセル</button><button class="wa-btn wa-btn-primary" type="button" @onclick="CreateAsync">保存</button></div>
+                </div>
+            </section>
+        }
+
+        <section class="wa-panel wa-mb">
+            <div class="wa-panel-header"><span>スケジュール</span><span class="wa-panel-sub">ローカル時刻</span></div>
+            @if (triggers.Count == 0)
+            {
+                <div class="wa-empty">トリガーはまだありません。</div>
+            }
+            else
+            {
+                <div class="wa-table-wrap">
+                    <table class="wa-table" data-pw="trigger-table">
+                        <thead><tr><th>名前</th><th>対象</th><th>種別</th><th>次回</th><th>重複時</th><th>直近の結果</th><th>有効</th></tr></thead>
+                        <tbody>
+                        @foreach (var trigger in triggers)
+                        {
+                            <tr data-pw="trigger-row">
+                                <td class="wa-primary-text">@trigger.Name</td>
+                                <td><span class="wa-tag wa-tag-accent">@trigger.TargetName</span></td>
+                                <td class="wa-cell-dim">@TriggerTypeLabel(trigger)</td>
+                                <td class="wa-cell-dim">@(trigger.NextRunAt?.ToLocalTime().ToString("MM-dd HH:mm") ?? "—")</td>
+                                <td><span class="wa-tag">@OverlapLabel(trigger.OverlapPolicy)</span></td>
+                                <td>
+                                    @if (!fires.TryGetValue(trigger.TriggerId, out var history) || history.Count == 0)
+                                    {
+                                        <span class="wa-cell-dim">—</span>
+                                    }
+                                    else
+                                    {
+                                        var decision = history[0].Decision;
+                                        <span class="wa-tag @(decision is TriggerDecision.Started or TriggerDecision.Parallel ? "wa-tag-ok" : decision == TriggerDecision.Queued ? "wa-tag-warn" : "wa-tag-bad")">@(decision is TriggerDecision.Started or TriggerDecision.Parallel ? "成功" : decision == TriggerDecision.Queued ? "待機" : "抑止")</span>
+                                    }
+                                </td>
+                                <td><button type="button" class="wa-toggle @(trigger.Enabled ? "on" : null)" aria-label="@trigger.Name を@(trigger.Enabled ? "無効" : "有効")にする" @onclick="() => ToggleAsync(trigger)"></button></td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+
+        <div class="wa-three-col">
+            <section class="wa-panel"><div class="wa-panel-header"><span>重複ポリシー</span></div><div class="wa-panel-body wa-copy"><div class="wa-mb"><span class="wa-tag">抑止</span> 前回が終わるまで新しい起動を行わない</div><div class="wa-mb"><span class="wa-tag">待機</span> 前回の完了後に 1 回だけ起動する</div><div><span class="wa-tag">並走</span> 同時実行数の上限まで並行して起動する</div></div></section>
+            <section class="wa-panel"><div class="wa-panel-header"><span>無人実行時の扱い</span></div><div class="wa-panel-body wa-copy">承認待ちが発生した場合は画面バッジで知らせます。期限 (既定 15 分) を過ぎた承認は却下として扱い、ミッションは中断になります。</div></section>
+            <section class="wa-panel"><div class="wa-panel-header"><span>再起動時の復旧</span></div><div class="wa-panel-body wa-copy">未完了ミッションは再開または失敗確定のいずれかへ収束させ、状態不明のまま残しません。有効なトリガーは次回起動時刻を再計算して復元します。</div></section>
+        </div>
+    </div>
+</div>
+
+@code {
+    private IReadOnlyList<TriggerDefinition> triggers = Array.Empty<TriggerDefinition>();
+    private readonly Dictionary<string, IReadOnlyList<TriggerFire>> fires = new(StringComparer.Ordinal);
+    private bool showCreate;
+    private string? error;
+    private string newName = string.Empty;
+    private string newKind = "Schedule";
+    private string newTarget = "demo-team";
+    private string newInput = "自動実行されたミッションです。";
+    private string newSchedule = "0 9 * * 1";
+    private string newOverlap = "Skip";
+
+    private static readonly string[] WeekdayNames = ["日", "月", "火", "水", "木", "金", "土"];
+
+    private string ScheduleLabel => newKind switch
+    {
+        "Schedule" => "Cron",
+        "Interval" => "間隔秒",
+        _ => "Cron / 間隔秒 (この種別では未使用)",
+    };
+
+    private string SchedulePlaceholder => newKind == "Interval" ? "300" : "0 9 * * 1";
+
+    private string? SchedulePreview => newKind switch
+    {
+        "Schedule" => DescribeCron(newSchedule),
+        "Interval" => DescribeInterval(newSchedule),
+        _ => null,
+    };
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        triggers = await TriggerStore.ListAsync();
+        fires.Clear();
+        foreach (var trigger in triggers) fires[trigger.TriggerId] = await TriggerStore.ListFiresAsync(trigger.TriggerId);
+    }
+
+    private async Task ToggleAsync(TriggerDefinition trigger)
+    {
+        await TriggerStore.SetEnabledAsync(trigger.Name, !trigger.Enabled);
+        await LoadAsync();
+    }
+
+    private async Task CreateAsync()
+    {
+        error = null;
+        try
+        {
+            var kind = Enum.Parse<TriggerKind>(newKind);
+            var overlap = Enum.Parse<OverlapPolicy>(newOverlap);
+            await TriggerStore.CreateAsync(new TriggerDefinition
+            {
+                TriggerId = Guid.NewGuid().ToString("N"),
+                Name = newName.Trim(),
+                Kind = kind,
+                TargetKind = "Team",
+                TargetName = newTarget.Trim(),
+                Input = newInput.Trim(),
+                Cron = kind == TriggerKind.Schedule ? newSchedule.Trim() : null,
+                IntervalSeconds = kind == TriggerKind.Interval && int.TryParse(newSchedule, out var seconds) ? seconds : null,
+                OverlapPolicy = overlap,
+                Enabled = true,
+                NextRunAt = DateTimeOffset.Now.AddHours(1),
+            });
+            showCreate = false;
+            await LoadAsync();
+        }
+        catch (Exception ex) { error = $"トリガーを保存できませんでした: {ex.Message}"; }
+    }
+
+    private static string TriggerTypeLabel(TriggerDefinition trigger) => trigger.Kind switch { TriggerKind.Schedule => $"cron {trigger.Cron}", TriggerKind.Interval => $"{trigger.IntervalSeconds} 秒ごと", TriggerKind.Event => "event: local webhook", _ => "manual" };
+    private static string OverlapLabel(OverlapPolicy policy) => policy switch { OverlapPolicy.Skip => "抑止", OverlapPolicy.Queue => "待機", OverlapPolicy.Parallel => "並走", _ => policy.ToString() };
+
+    /// <summary>
+    /// 5フィールド cron (分 時 日 月 曜日) のよくある形だけを日本語に変換する。複雑な式はそのまま返す。
+    /// </summary>
+    private static string? DescribeCron(string? cron)
+    {
+        if (string.IsNullOrWhiteSpace(cron))
+        {
+            return null;
+        }
+        var fields = cron.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (fields.Length != 5)
+        {
+            return "分 時 日 月 曜日 の 5 項目で入力してください";
+        }
+        var (minute, hour, day, month, weekday) = (fields[0], fields[1], fields[2], fields[3], fields[4]);
+
+        if (minute.StartsWith("*/", StringComparison.Ordinal) && hour == "*" && day == "*" && month == "*" && weekday == "*"
+            && int.TryParse(minute[2..], out var everyMinutes))
+        {
+            return $"{everyMinutes} 分ごと";
+        }
+
+        if (!int.TryParse(minute, out var m) || !int.TryParse(hour, out var h))
+        {
+            return null;
+        }
+        var time = $"{h:00}:{m:00}";
+
+        if (day == "*" && month == "*" && weekday == "*")
+        {
+            return $"毎日 {time}";
+        }
+
+        if (day == "*" && month == "*" && weekday != "*")
+        {
+            var names = weekday.Split(',')
+                .Select(part => int.TryParse(part, out var w) && w is >= 0 and <= 6 ? WeekdayNames[w] : null)
+                .ToArray();
+            if (names.Any(name => name is null))
+            {
+                return null;
+            }
+            return $"毎週 {string.Join("・", names)}曜 {time}";
+        }
+
+        if (day != "*" && month == "*" && weekday == "*" && int.TryParse(day, out var d))
+        {
+            return $"毎月 {d} 日 {time}";
+        }
+
+        if (day != "*" && month != "*" && weekday == "*" && int.TryParse(day, out var d2) && int.TryParse(month, out var mo))
+        {
+            return $"{mo} 月 {d2} 日 {time}";
+        }
+
+        return null;
+    }
+
+    private static string? DescribeInterval(string? seconds)
+    {
+        if (!int.TryParse(seconds, out var value) || value <= 0)
+        {
+            return null;
+        }
+        if (value % 86400 == 0)
+        {
+            return $"{value / 86400} 日ごと";
+        }
+        if (value % 3600 == 0)
+        {
+            return $"{value / 3600} 時間ごと";
+        }
+        if (value % 60 == 0)
+        {
+            return $"{value / 60} 分ごと";
+        }
+        return $"{value} 秒ごと";
+    }
+}

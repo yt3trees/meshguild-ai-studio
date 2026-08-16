@@ -1,0 +1,289 @@
+@page "/agents/{AgentName}/edit"
+@using WorkAgents.Agents.Loading
+@using WorkAgents.Core.Authoring
+@inject DefinitionAuthoringService Authoring
+
+<PageTitle>MeshGuild AI Studio | エージェント編集</PageTitle>
+
+@if (original is null)
+{
+    <div class="wa-scroll-page">
+        <div class="wa-inner">
+            <div class="wa-head"><div><h1>エージェント編集</h1><p><a class="wa-back-link" href="teams-agents">← 一覧へ戻る</a></p></div></div>
+            <div class="wa-panel"><div class="wa-empty">エージェント「@AgentName」は見つかりませんでした。</div></div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="wa-scroll-page">
+        <div class="wa-inner">
+            <div class="wa-head">
+                <div>
+                    <p><a class="wa-back-link" href="teams-agents">← 一覧へ戻る</a></p>
+                    <h1>@(string.IsNullOrWhiteSpace(displayName) ? name : displayName)</h1>
+                    <p>使える共有スキルと権限をフォームで編集します。指示文は instructions.md に書き出されます。</p>
+                </div>
+                <div class="wa-head-actions">
+                    @if (isDirty)
+                    {
+                        <span class="wa-tag wa-tag-warn" data-pw="agent-dirty">未保存の変更</span>
+                    }
+                    <button class="wa-btn wa-btn-sm" type="button" @onclick="Validate" data-pw="agent-validate">検証</button>
+                    <button class="wa-btn wa-btn-primary wa-btn-sm" type="button" @onclick="SaveAsync" disabled="@(!isDirty || isSaving)" data-pw="agent-save">
+                        @(isSaving ? "保存中…" : "保存")
+                    </button>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(savedMessage))
+            {
+                <div class="wa-note wa-note-accent" data-pw="agent-saved">@savedMessage</div>
+            }
+
+            <div class="wa-editor-grid">
+                <div class="wa-editor-main">
+                    <section class="wa-panel wa-mb">
+                        <div class="wa-panel-header"><span>基本</span></div>
+                        <div class="wa-panel-body">
+                            @foreach (var field in BasicFields)
+                            {
+                                @* name はフォルダー名と一体なので、ここでは変えさせない (改名は新規作成でやる)。 *@
+                                <SchemaField Field="field" Value="@BasicValue(field.Name)"
+                                             Disabled="@IsNameField(field)"
+                                             ValueChanged="@(value => SetBasicValue(field.Name, value))" />
+                            }
+                            <p class="wa-field-hint">name を変えたいときは、新しい名前で作り直してください。フォルダー名と一致している必要があります。</p>
+                        </div>
+                    </section>
+
+                    <section class="wa-panel wa-mb">
+                        <div class="wa-panel-header">
+                            <span>スキル</span>
+                            <span class="wa-panel-sub">共有 @skills.Count 件 · ローカル @LocalSkillNames.Count 件</span>
+                        </div>
+                        <div class="wa-panel-body">
+                            @if (SkillsField is not null)
+                            {
+                                <SchemaField Field="SkillsField" Values="skills"
+                                             ValuesChanged="SetSkills"
+                                             Options="referenceOptions" />
+                            }
+
+                            <div class="wa-subsection">
+                                <div class="wa-subsection-head">ローカルスキル</div>
+                                <p class="wa-field-help">
+                                    agents/@name/skills/&lt;name&gt;/SKILL.md に置いたスキルです。置くだけで読み込まれるため agent.yaml には書きません。
+                                </p>
+                                @if (LocalSkillNames.Count == 0)
+                                {
+                                    <div class="wa-cell-dim">ローカルスキルはありません。</div>
+                                }
+                                else
+                                {
+                                    <div class="wa-checkbox-row">
+                                        @foreach (var skill in LocalSkillNames)
+                                        {
+                                            <span class="wa-tag">@skill</span>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="wa-panel wa-mb">
+                        <div class="wa-panel-header"><span>権限</span></div>
+                        <div class="wa-panel-body">
+                            @if (HarnessShellField is not null)
+                            {
+                                <SchemaField Field="HarnessShellField" Value="@(harnessShell ? "true" : null)"
+                                             ValueChanged="@(value => { harnessShell = string.Equals(value, "true", StringComparison.OrdinalIgnoreCase); MarkDirty(); })" />
+                            }
+                            @if (HarnessFileStoreField is not null)
+                            {
+                                <SchemaField Field="HarnessFileStoreField" Value="@harnessFileStore"
+                                             ValueChanged="@(value => { harnessFileStore = value; MarkDirty(); })" />
+                            }
+                        </div>
+                    </section>
+
+                    <section class="wa-panel wa-mb">
+                        <div class="wa-panel-header"><span>指示文</span><span class="wa-panel-sub">instructions.md</span></div>
+                        <div class="wa-panel-body">
+                            <div class="wa-field">
+                                <label><span>instructions.md</span></label>
+                                <p class="wa-field-help">役割の要点だけを薄く書きます。手順の詳細は SKILL.md 側に置いてください。</p>
+                                <textarea class="wa-input" rows="12" value="@instructions"
+                                          @onchange="args => { instructions = args.Value?.ToString() ?? string.Empty; MarkDirty(); }"
+                                          data-pw="agent-instructions"></textarea>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <div class="wa-editor-side">
+                    @* 検証結果は枠を持たないので、他の側パネルと同じ体裁になるよう包む。 *@
+                    <section class="wa-panel">
+                        <div class="wa-panel-header"><span>検証</span></div>
+                        <div class="wa-panel-body">
+                            <DiagnosticList Diagnostics="diagnostics"
+                                            ValidMessage="このエージェントは検証を通りました。"
+                                            IdleMessage="検証を押すと、スキルの参照切れや名前の誤りを確認できます。" />
+                        </div>
+                    </section>
+
+                    <section class="wa-panel wa-mt">
+                        <div class="wa-panel-header"><span>agent.yaml</span></div>
+                        <div class="wa-panel-body">
+                            <p class="wa-field-help">保存するとこの内容が書き出されます。コメントは保持されません。</p>
+                            <pre class="wa-yaml" data-pw="agent-yaml">@Authoring.ToYaml(WorkingAgent)</pre>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string? AgentName { get; set; }
+
+    private static UiSchemaDocument Schema => UiSchemaCatalog.Get("agent");
+
+    private AgentDefinition? original;
+    private string name = string.Empty;
+    private string? kind;
+    private string? displayName;
+    private string? description;
+    private List<string> skills = new();
+    private bool harnessShell;
+    private string? harnessFileStore;
+    private string instructions = string.Empty;
+
+    private bool isDirty;
+    private bool isSaving;
+    private string? savedMessage;
+    private IReadOnlyList<AuthoringDiagnostic>? diagnostics;
+    private ReferenceOptions referenceOptions = ReferenceOptions.Empty;
+
+    private static IReadOnlyList<UiField> BasicFields => Schema.FieldsInGroup("基本");
+    private static UiField? SkillsField => Schema.Field("skills");
+    private static UiField? HarnessShellField => Schema.Field("harness")?.Field("shell");
+    private static UiField? HarnessFileStoreField => Schema.Field("harness")?.Field("fileStore");
+
+    private IReadOnlyList<string> LocalSkillNames => original?.LocalSkillNames ?? Array.Empty<string>();
+
+    private static bool IsNameField(UiField field) => string.Equals(field.Name, "name", StringComparison.Ordinal);
+
+    protected override void OnParametersSet()
+    {
+        Load(AgentName is null ? null : Authoring.FindAgent(AgentName));
+    }
+
+    private void Load(AgentDefinition? agent)
+    {
+        original = agent;
+        if (agent is null)
+        {
+            return;
+        }
+        name = agent.Name;
+        kind = agent.Kind;
+        displayName = agent.DisplayName;
+        description = agent.Description;
+        skills = agent.SharedSkillNames.ToList();
+        harnessShell = agent.HarnessShell;
+        harnessFileStore = agent.HarnessFileStore;
+        instructions = agent.Instructions;
+        isDirty = false;
+        diagnostics = null;
+        savedMessage = null;
+        Refresh();
+    }
+
+    /// <summary>
+    /// フォームの現在値から定義を組み立てる。<see cref="AgentDefinition"/> は record ではないので
+    /// 毎回作り直す。ローダーが決める値 (フォルダー、ローカルスキル、ソース) は元の定義から引き継ぐ。
+    /// </summary>
+    private AgentDefinition WorkingAgent => new()
+    {
+        Name = name,
+        Kind = kind,
+        DisplayName = displayName ?? string.Empty,
+        Description = description ?? string.Empty,
+        Instructions = instructions,
+        FolderPath = original?.FolderPath ?? string.Empty,
+        SharedSkillNames = skills,
+        LocalSkillNames = LocalSkillNames,
+        HarnessShell = harnessShell,
+        HarnessFileStore = string.IsNullOrWhiteSpace(harnessFileStore) ? null : harnessFileStore,
+        SourceLabel = original?.SourceLabel ?? "standard",
+        OverriddenSourceLabels = original?.OverriddenSourceLabels ?? Array.Empty<string>(),
+    };
+
+    private void MarkDirty()
+    {
+        isDirty = true;
+        savedMessage = null;
+        Refresh();
+    }
+
+    private void Refresh()
+    {
+        referenceOptions = Authoring.BuildReferenceOptions();
+    }
+
+    private string? BasicValue(string fieldName) => fieldName switch
+    {
+        "name" => name,
+        "kind" => kind,
+        "displayName" => displayName,
+        "description" => description,
+        _ => null,
+    };
+
+    private void SetBasicValue(string fieldName, string? value)
+    {
+        switch (fieldName)
+        {
+            case "name": name = value?.Trim() ?? string.Empty; break;
+            case "kind": kind = value; break;
+            case "displayName": displayName = value; break;
+            case "description": description = value; break;
+            default: return;
+        }
+        MarkDirty();
+    }
+
+    private void SetSkills(IReadOnlyList<string> value)
+    {
+        skills = value.ToList();
+        MarkDirty();
+    }
+
+    private void Validate()
+    {
+        diagnostics = Authoring.ValidateAgent(WorkingAgent);
+        Refresh();
+    }
+
+    private async Task SaveAsync()
+    {
+        isSaving = true;
+        try
+        {
+            var result = await Authoring.SaveAgentAsync(WorkingAgent);
+            diagnostics = result.Diagnostics;
+            if (result.Saved)
+            {
+                Load(Authoring.FindAgent(name) ?? WorkingAgent);
+                savedMessage = $"{result.Path} に保存しました。実行への反映はアプリの再起動後です。";
+            }
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+}

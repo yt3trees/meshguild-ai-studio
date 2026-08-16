@@ -1,0 +1,1537 @@
+@page "/graphs"
+@page "/graphs/{GraphName}"
+@using WorkAgents.Core.Authoring
+@using WorkAgents.Core.Graphs
+@inject DefinitionAuthoringService Authoring
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@implements IDisposable
+
+<PageTitle>MeshGuild AI Studio | Graph Studio</PageTitle>
+
+@if (GraphName is null)
+{
+    <div class="wa-scroll-page">
+        <div class="wa-inner">
+            <div class="wa-head">
+                <div><h1>Graph Studio</h1><p>グラフを選択すると詳細と編集画面が開きます</p></div>
+                <div><a class="wa-btn wa-btn-primary wa-btn-sm" href="definitions/new?kind=graph">New graph</a></div>
+            </div>
+            @if (Authoring.Graphs.Count == 0)
+            {
+                <div class="wa-panel">
+                    <div class="wa-empty">
+                        グラフ定義はまだありません。
+                        <a class="wa-btn wa-btn-primary wa-btn-sm" href="definitions/new?kind=graph">テンプレートから作る</a>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="wa-card-grid" data-pw="graph-list">
+                    @foreach (var graph in Authoring.Graphs)
+                    {
+                        <a class="wa-panel wa-link-card" href="graphs/@graph.Name" data-pw="graph-list-item">
+                            <div class="wa-link-card-title"><span>@graph.Name</span><span class="wa-tag">v@(graph.Version)</span></div>
+                            <div class="wa-link-card-meta">@DefinitionNarrator.Headline(graph)</div>
+                        </a>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+else if (original is null)
+{
+    <div class="wa-scroll-page">
+        <div class="wa-inner">
+            <div class="wa-head"><div><h1>Graph Studio</h1><p><a class="wa-back-link" href="graphs">← 一覧へ戻る</a></p></div></div>
+            <div class="wa-panel"><div class="wa-empty">グラフ「@GraphName」は見つかりませんでした。</div></div>
+        </div>
+    </div>
+}
+else
+{
+<div class="wa-graph-wrap">
+    @if (toastMessage is not null)
+    {
+        <div class="wa-toast wa-toast-@toastKind" data-pw="graph-toast">@toastMessage</div>
+    }
+    <main class="wa-graph-main">
+        <div class="wa-graph-toolbar">
+            <a class="wa-back-link" href="graphs">← 一覧</a>
+            <h1 class="wa-graph-title">Graph Studio</h1>
+            <span class="wa-tag wa-tag-accent">@original.Name</span>
+            <span class="wa-tag">v@(original.Version)</span>
+            @if (editingSubgraphId is not null)
+            {
+                <button class="wa-btn wa-btn-sm" type="button" @onclick="ExitSubgraph" data-pw="graph-exit-subgraph">← @original.Name に戻る</button>
+                <span class="wa-tag wa-tag-purple" data-pw="graph-subgraph-badge">サブグラフ: @editingSubgraphId</span>
+            }
+            @if (isDirty)
+            {
+                <span class="wa-tag wa-tag-warn" data-pw="graph-dirty">未保存の変更</span>
+            }
+            <span class="wa-toolbar-spacer"></span>
+            <button class="wa-btn wa-btn-sm" type="button" @onclick="AddNode" data-pw="graph-add-node">+ ノード</button>
+            <button class="wa-btn wa-btn-sm" type="button" @onclick="Validate" data-pw="graph-validate">検証</button>
+            <button class="wa-btn wa-btn-sm" type="button" @onclick="@(() => SetTab("yaml"))" data-pw="graph-show-yaml">YAML で表示</button>
+            <button class="wa-btn wa-btn-primary wa-btn-sm" type="button" @onclick="SaveAsync" disabled="@(!isDirty || isSaving)" data-pw="graph-save">
+                @(isSaving ? "保存中…" : "保存")
+            </button>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(savedMessage))
+        {
+            <div class="wa-note wa-note-accent" data-pw="graph-saved">@savedMessage</div>
+        }
+
+        <div class="wa-graph-canvas" data-pw="graph-canvas" @ref="canvasScrollRef">
+            <div class="wa-canvas-tools">
+                <div class="wa-canvas-tools-inner">
+                    <button class="wa-btn wa-btn-sm" type="button" @onclick="Undo" disabled="@(undoStack.Count == 0)" data-pw="graph-undo" title="元に戻す (Ctrl+Z)">↶ 戻す</button>
+                    <button class="wa-btn wa-btn-sm" type="button" @onclick="ClearSelection" disabled="@(selectedNodeId is null)" data-pw="graph-show-all" title="選択を解除してすべてのノードを明るく表示する">すべて表示</button>
+                </div>
+            </div>
+            @{ var edgeGeometry = ComputeEdgeGeometry(); }
+            <div class="wa-canvas-inner" @ref="canvasInnerRef" @onclick="ClearSelection" style="width:@(canvasSize.Width)px;height:@(canvasSize.Height)px">
+                <svg class="wa-graph-edges" viewBox="0 0 @(canvasSize.Width) @(canvasSize.Height)" style="width:@(canvasSize.Width)px;height:@(canvasSize.Height)px">
+                    <defs>
+                        <marker id="wa-arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
+                            <path d="M0,0 L10,5 L0,10 z" fill="#5a5a66" />
+                        </marker>
+                        <marker id="wa-arrow-accent" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
+                            <path d="M0,0 L10,5 L0,10 z" fill="#5e8bff" />
+                        </marker>
+                        <marker id="wa-arrow-loop" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
+                            <path d="M0,0 L10,5 L0,10 z" fill="#4a4256" />
+                        </marker>
+                        <marker id="wa-arrow-loop-accent" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
+                            <path d="M0,0 L10,5 L0,10 z" fill="#b48ee0" />
+                        </marker>
+                    </defs>
+                    @foreach (var geo in edgeGeometry)
+                    {
+                        var edge = geo.Edge;
+                        var isRelated = selectedNodeId is not null && (edge.From == selectedNodeId || edge.To == selectedNodeId);
+                        var isDimmed = selectedNodeId is not null && !isRelated;
+                        var isEmphasized = isRelated || selectedEdgeId == edge.Id;
+                        var cssClass = $"{(edge.LoopBack ? "wa-edge-loop" : "wa-edge")} {(selectedEdgeId == edge.Id ? "selected" : null)} {(isRelated ? "wa-edge-related" : null)} {(isDimmed ? "wa-edge-dim" : null)}";
+                        var markerId = edge.LoopBack
+                            ? (isEmphasized ? "wa-arrow-loop-accent" : "wa-arrow-loop")
+                            : (isEmphasized ? "wa-arrow-accent" : "wa-arrow");
+                        @if (geo.PathD is not null)
+                        {
+                            <path d="@geo.PathD" fill="none" marker-end="url(#@markerId)" class="@cssClass" />
+                            <path d="@geo.PathD" fill="none" class="wa-edge-hit"
+                                  @onclick="() => SelectEdge(edge.Id)" @onclick:stopPropagation="true" data-pw="graph-edge-hit" />
+                        }
+                        else
+                        {
+                            <line x1="@geo.X1" y1="@geo.Y1" x2="@geo.X2" y2="@geo.Y2" marker-end="url(#@markerId)" class="@cssClass" />
+                            <line x1="@geo.X1" y1="@geo.Y1" x2="@geo.X2" y2="@geo.Y2" class="wa-edge-hit"
+                                  @onclick="() => SelectEdge(edge.Id)" @onclick:stopPropagation="true" data-pw="graph-edge-hit" />
+                        }
+                    }
+                    <line @ref="edgePreviewRef" class="wa-edge-preview" x1="0" y1="0" x2="0" y2="0" />
+                </svg>
+                @foreach (var item in nodes.Select((node, index) => (node, index)))
+                {
+                    var position = PositionOf(item.node.Id);
+                    var isSelected = selectedNodeId == item.node.Id;
+                    var isRelated = !isSelected && selectedNodeId is not null && ConnectedNodeIds.Contains(item.node.Id);
+                    var isDimmed = selectedNodeId is not null && !isSelected && !isRelated;
+                    <button type="button"
+                            class="wa-graph-node wa-node-@item.node.Kind.ToString().ToLowerInvariant() @(isSelected ? "selected" : null) @(isRelated ? "wa-node-related" : null) @(isDimmed ? "wa-node-dim" : null) @(HasProblem(item.node.Id) ? "wa-node-problem" : null)"
+                            style="left:@(position.X)px;top:@(position.Y)px"
+                            @onclick="() => SelectNode(item.node.Id)" @onclick:stopPropagation="true"
+                            data-pw="graph-node" data-node-id="@item.node.Id">
+                        <span class="wa-node-kind">@item.node.Kind</span>
+                        <strong>@(item.node.Title ?? item.node.Id)</strong>
+                        <small>@NodeMeta(item.node)</small>
+                    </button>
+                    <div class="wa-edge-handle" style="left:@(position.X + NodeWidth)px;top:@(position.Y + NodeHeight / 2)px"
+                         data-edge-handle data-node-id="@item.node.Id" data-pw="graph-edge-handle"
+                         title="ドラッグして別のノードにつなぐとエッジができます"></div>
+                }
+                @if (selectedEdgeId is not null && edgeGeometry.FirstOrDefault(g => g.Edge.Id == selectedEdgeId) is { } selectedGeo)
+                {
+                    <button type="button" class="wa-edge-delete-btn" style="left:@(selectedGeo.MidX)px;top:@(selectedGeo.MidY)px"
+                            @onclick="() => RemoveEdge(selectedGeo.Edge)" @onclick:stopPropagation="true"
+                            data-pw="graph-edge-delete-inline" title="このエッジを削除">×</button>
+                }
+            </div>
+        </div>
+
+        <NarrationPanel Title="@(editingSubgraphId is null ? "このグラフはこう動きます" : $"サブグラフ「{editingSubgraphId}」はこう動きます")"
+                        Headline="@DefinitionNarrator.Headline(CanvasGraph)"
+                        Lines="@narration" />
+    </main>
+
+    <aside class="wa-graph-inspector">
+        <div class="wa-inspector-tabs">
+            <button type="button" class="@TabClass("node")" @onclick="@(() => SetTab("node"))" data-pw="inspector-tab-node">ノード</button>
+            <button type="button" class="@TabClass("edges")" @onclick="@(() => SetTab("edges"))" data-pw="inspector-tab-edges">エッジ (@edges.Count)</button>
+            <button type="button" class="@TabClass("graph")" @onclick="@(() => SetTab("graph"))" data-pw="inspector-tab-graph">グラフ</button>
+            <button type="button" class="@TabClass("yaml")" @onclick="@(() => SetTab("yaml"))" data-pw="inspector-tab-yaml">YAML</button>
+        </div>
+
+        <div class="wa-inspector-body">
+            @switch (inspectorTab)
+            {
+                case "node":
+                    @if (SelectedNode is null)
+                    {
+                        <div class="wa-empty">ノードを選択してください。</div>
+                    }
+                    else
+                    {
+                        var node = SelectedNode;
+                        <div class="wa-inspector-head">
+                            <span class="wa-tag wa-tag-purple">@node.Kind.ToString().ToLowerInvariant()</span>
+                            <button type="button" class="wa-btn wa-btn-sm wa-btn-danger" @onclick="DeleteSelectedNode" data-pw="graph-delete-node">このノードを削除</button>
+                        </div>
+
+                        <div class="wa-subsection" data-pw="node-connected-edges">
+                            <div class="wa-subsection-head">つながっているエッジ (@ConnectedEdges(node.Id).Count)</div>
+                            @if (ConnectedEdges(node.Id).Count == 0)
+                            {
+                                <p class="wa-field-help">エッジがありません。キャンバス上のノード右側にある丸いハンドルを他のノードへドラッグするとつながります。</p>
+                            }
+                            else
+                            {
+                                @foreach (var edge in ConnectedEdges(node.Id))
+                                {
+                                    var captured = edge;
+                                    var isOutgoing = captured.From == node.Id;
+                                    <div class="wa-edge-card @(selectedEdgeId == captured.Id ? "selected" : null)" @onclick="() => SelectEdge(captured.Id)">
+                                        <div class="wa-edge-card-head">
+                                            <span class="wa-edge-card-route">
+                                                <span class="wa-edge-card-role">From</span>
+                                                <span class="wa-tag @(isOutgoing ? "wa-tag-accent" : null)">@captured.From</span>
+                                                <span class="wa-edge-card-arrow">→</span>
+                                                <span class="wa-edge-card-role">To</span>
+                                                <span class="wa-tag @(!isOutgoing ? "wa-tag-accent" : null)">@captured.To</span>
+                                            </span>
+                                            <button type="button" class="wa-btn wa-btn-sm wa-btn-danger" @onclick="() => RemoveEdge(captured)" @onclick:stopPropagation="true">削除</button>
+                                        </div>
+                                    </div>
+                                }
+                            }
+                            <button type="button" class="wa-btn wa-btn-sm" @onclick="() => AddEdgeFrom(node.Id)" data-pw="graph-add-edge-from-node">+ 出力エッジを追加</button>
+                        </div>
+
+                        @foreach (var field in VisibleNodeFields(node))
+                        {
+                            @if (field.Name == "codeFile" && node.Kind == NodeKind.Code)
+                            {
+                                <SchemaField Field="field"
+                                             Value="@NodeValue(node, field.Name)"
+                                             ValueChanged="@(value => SetNodeValue(field.Name, value))"
+                                             Options="referenceOptions">
+                                    <TrailingAction>
+                                        <button type="button" class="wa-field-icon-btn" @onclick="() => OpenCodeFileFolder(node)"
+                                                data-pw="graph-open-code-folder" title="フォルダを開く" aria-label="フォルダを開く">
+                                            <span class="wa-icon" aria-hidden="true">folder_open</span>
+                                        </button>
+                                    </TrailingAction>
+                                </SchemaField>
+                            }
+                            else if (field.Name == "body" && node.Kind == NodeKind.Loop)
+                            {
+                                <SchemaField Field="field"
+                                             Value="@NodeValue(node, field.Name)"
+                                             ValueChanged="@(value => SetNodeValue(field.Name, value))"
+                                             Options="referenceOptions">
+                                    <TrailingAction>
+                                        @if (!string.IsNullOrWhiteSpace(node.Body) && subgraphs.ContainsKey(node.Body!))
+                                        {
+                                            <button type="button" class="wa-field-icon-btn" @onclick="() => EnterSubgraph(node.Body!)"
+                                                    disabled="@(editingSubgraphId is not null)"
+                                                    data-pw="graph-jump-to-subgraph" title="このサブグラフを編集" aria-label="このサブグラフを編集">
+                                                <span class="wa-icon" aria-hidden="true">open_in_new</span>
+                                            </button>
+                                        }
+                                    </TrailingAction>
+                                </SchemaField>
+                            }
+                            else
+                            {
+                                <SchemaField Field="field"
+                                             Value="@NodeValue(node, field.Name)"
+                                             ValueChanged="@(value => SetNodeValue(field.Name, value))"
+                                             Options="referenceOptions" />
+                            }
+                        }
+
+                        @if (node.Kind == NodeKind.Loop)
+                        {
+                            var stopField = NodeField("stop");
+                            if (stopField is not null)
+                            {
+                                <div class="wa-subsection">
+                                    <div class="wa-subsection-head">停止条件 (stop)</div>
+                                    <p class="wa-field-help">@stopField.Description</p>
+                                    @foreach (var field in stopField.Fields.OrderBy(f => f.Order))
+                                    {
+                                        <SchemaField Field="field"
+                                                     Value="@NodeValue(node, $"stop.{field.Name}")"
+                                                     ValueChanged="@(value => SetNodeValue($"stop.{field.Name}", value))"
+                                                     Options="referenceOptions" />
+                                    }
+                                </div>
+                            }
+
+                            var evaluatorField = NodeField("evaluator");
+                            if (evaluatorField is not null)
+                            {
+                                <div class="wa-subsection">
+                                    <div class="wa-subsection-head">評価者 (evaluator)</div>
+                                    @foreach (var field in evaluatorField.Fields.OrderBy(f => f.Order)
+                                        .Where(f => f.IsVisible(name => NodeValue(node, $"evaluator.{name}"))))
+                                    {
+                                        if (field.Type == UiFieldType.Array)
+                                        {
+                                            <div class="wa-field">
+                                                <label><span>metrics</span></label>
+                                                <p class="wa-field-help">@field.Description</p>
+                                                @foreach (var metric in node.Evaluator?.Metrics ?? Array.Empty<MetricTarget>())
+                                                {
+                                                    var captured = metric;
+                                                    <div class="wa-row-card">
+                                                        <span>@captured.Name</span>
+                                                        <span>@(string.Equals(captured.Direction, "lte", StringComparison.OrdinalIgnoreCase) ? "≦" : "≧") @captured.Target</span>
+                                                        <button type="button" class="wa-btn wa-btn-sm" @onclick="() => RemoveMetric(captured)">削除</button>
+                                                    </div>
+                                                }
+                                                <div class="wa-row-card">
+                                                    <input class="wa-input" placeholder="指標名" @bind="newMetricName" />
+                                                    <input class="wa-input" type="number" step="any" placeholder="目標値" @bind="newMetricTarget" />
+                                                    <select class="wa-input" @bind="newMetricDirection">
+                                                        <option value="gte">gte (目標値以上で合格)</option>
+                                                        <option value="lte">lte (目標値以下で合格)</option>
+                                                    </select>
+                                                    <button type="button" class="wa-btn wa-btn-sm" @onclick="AddMetric">追加</button>
+                                                </div>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <SchemaField Field="field"
+                                                         Value="@NodeValue(node, $"evaluator.{field.Name}")"
+                                                         ValueChanged="@(value => SetNodeValue($"evaluator.{field.Name}", value))"
+                                                         Options="referenceOptions" />
+                                        }
+                                    }
+                                </div>
+                            }
+                        }
+
+                        <div class="wa-note">@DefinitionNarrator.DescribeNode(node, CanvasGraph)</div>
+                    }
+                    break;
+
+                case "edges":
+                    <div class="wa-subsection">
+                        <div class="wa-subsection-head">エッジ</div>
+                        @if (edges.Count == 0)
+                        {
+                            <div class="wa-empty">エッジがありません。ノードをつなぐと実行順が決まります。</div>
+                        }
+                        @foreach (var edge in edges.ToArray())
+                        {
+                            var captured = edge;
+                            <div class="wa-edge-card @(selectedEdgeId == captured.Id ? "selected" : null)" data-pw="edge-card" @onclick="() => SelectEdge(captured.Id)">
+                                <div class="wa-edge-card-head">
+                                    <span class="wa-tag">@captured.Id</span>
+                                    <button type="button" class="wa-btn wa-btn-sm wa-btn-danger" @onclick="() => RemoveEdge(captured)" @onclick:stopPropagation="true">削除</button>
+                                </div>
+                                @foreach (var field in EdgeFields.Where(f => !f.Advanced))
+                                {
+                                    <SchemaField Field="field"
+                                                 Value="@EdgeValue(captured, field.Name)"
+                                                 ValueChanged="@(value => SetEdgeValue(captured, field.Name, value))"
+                                                 Options="referenceOptions" />
+                                }
+                            </div>
+                        }
+                        <button type="button" class="wa-btn wa-btn-sm" @onclick="AddEdge" data-pw="graph-add-edge">+ エッジを追加</button>
+                    </div>
+                    break;
+
+                case "graph":
+                    @foreach (var field in GraphScalarFields)
+                    {
+                        <SchemaField Field="field"
+                                     Value="@GraphValue(field.Name)"
+                                     ValueChanged="@(value => SetGraphValue(field.Name, value))"
+                                     Options="referenceOptions" />
+                    }
+                    <div class="wa-subsection">
+                        <div class="wa-subsection-head">既定値 (defaults)</div>
+                        @if (DefaultTeamField is not null)
+                        {
+                            <SchemaField Field="DefaultTeamField"
+                                         Value="@defaults.Team"
+                                         ValueChanged="@(value => { defaults = defaults with { Team = value }; MarkDirty(); })"
+                                         Options="referenceOptions" />
+                        }
+                        @if (BudgetCostField is not null)
+                        {
+                            <SchemaField Field="BudgetCostField"
+                                         Value="@Text(defaults.BudgetCostLimitUsd)"
+                                         ValueChanged="@(value => { defaults = defaults with { BudgetCostLimitUsd = ParseDouble(value) }; MarkDirty(); })" />
+                        }
+                        @if (BudgetTimeField is not null)
+                        {
+                            <SchemaField Field="BudgetTimeField"
+                                         Value="@defaults.BudgetTimeLimitSeconds?.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                         ValueChanged="@(value => { defaults = defaults with { BudgetTimeLimitSeconds = ParseInt(value) }; MarkDirty(); })" />
+                        }
+                    </div>
+                    <div class="wa-subsection" data-pw="subgraphs-section">
+                        <div class="wa-subsection-head">サブグラフ</div>
+                        <p class="wa-field-help">LOOP ノードの body などから選ぶ内部グラフです。追加すると、ノードタブの「body」欄で選べるようになります。「編集」でこのキャンバス上のまま中身のノード/エッジを編集できます。</p>
+                        @if (subgraphs.Count == 0)
+                        {
+                            <div class="wa-empty">サブグラフはまだありません。</div>
+                        }
+                        else
+                        {
+                            @foreach (var pair in subgraphs)
+                            {
+                                var subgraphId = pair.Key;
+                                <div class="wa-row-card">
+                                    <span>@subgraphId</span>
+                                    <span>ノード @pair.Value.Nodes.Count 件 / エッジ @pair.Value.Edges.Count 件</span>
+                                    <button type="button" class="wa-btn wa-btn-sm" disabled="@(editingSubgraphId is not null)"
+                                            @onclick="() => EnterSubgraph(subgraphId)" data-pw="graph-edit-subgraph">編集</button>
+                                </div>
+                            }
+                        }
+                        <button type="button" class="wa-btn wa-btn-sm" disabled="@(editingSubgraphId is not null)"
+                                @onclick="AddSubgraph" data-pw="graph-add-subgraph">+ サブグラフを追加</button>
+                    </div>
+                    break;
+
+                case "yaml":
+                    <div class="wa-subsection">
+                        <div class="wa-subsection-head">graph.yaml</div>
+                        <p class="wa-field-help">保存するとこの内容が書き出されます。コメントは保持されません。</p>
+                        <pre class="wa-yaml" data-pw="graph-yaml">@Authoring.ToYaml(WorkingGraph)</pre>
+                    </div>
+                    break;
+            }
+        </div>
+
+        <DiagnosticList Diagnostics="diagnostics"
+                        ValidMessage="このグラフは検証を通りました。"
+                        IdleMessage="検証を押すと、参照切れや到達できないノードを確認できます。"
+                        NodeSelected="SelectNode" />
+    </aside>
+</div>
+}
+
+@code {
+    [Parameter] public string? GraphName { get; set; }
+
+    private const double NodeWidth = 150;
+    private const double NodeHeight = 86;
+    private const double ColumnGap = 48;
+    private const double RowGap = 34;
+    private const double OriginX = 40;
+    private const double OriginY = 40;
+
+    private static UiSchemaDocument Schema => UiSchemaCatalog.Get("graph");
+    private static UiField NodeDefinition => Schema.Definition("node")!;
+    private static UiField EdgeDefinition => Schema.Definition("edge")!;
+
+    private GraphDefinition? original;
+    private List<GraphNode> nodes = new();
+    private List<GraphEdge> edges = new();
+    private Dictionary<string, (double X, double Y)> layout = new(StringComparer.Ordinal);
+    private Dictionary<string, SubgraphDefinition> subgraphs = new(StringComparer.Ordinal);
+
+    /// <summary>サブグラフ編集中に退避しておくルート側の nodes/edges/layout。</summary>
+    private List<GraphNode> rootNodes = new();
+    private List<GraphEdge> rootEdges = new();
+    private Dictionary<string, (double X, double Y)> rootLayout = new(StringComparer.Ordinal);
+
+    /// <summary>null ならルートを編集中。値があれば、その ID のサブグラフの中身を nodes/edges/layout に読み込んで編集中。</summary>
+    private string? editingSubgraphId;
+
+    private GraphDefaults defaults = new();
+    private string name = string.Empty;
+    private string? displayName;
+    private string? description;
+
+    private string? selectedNodeId;
+    private string? selectedEdgeId;
+    private string inspectorTab = "node";
+    private ElementReference canvasScrollRef;
+    private ElementReference canvasInnerRef;
+    private ElementReference edgePreviewRef;
+    private DotNetObjectReference<GraphStudio>? dotNetRef;
+    private bool isDirty;
+    private bool isSaving;
+    private string? savedMessage;
+    private IReadOnlyList<AuthoringDiagnostic>? diagnostics;
+    private IReadOnlyList<NarrationLine> narration = Array.Empty<NarrationLine>();
+    private ReferenceOptions referenceOptions = ReferenceOptions.Empty;
+    private Dictionary<string, (double X, double Y)> displayLayout = new(StringComparer.Ordinal);
+    private (double Width, double Height) canvasSize = (1120, 560);
+
+    private sealed record EditorSnapshot(
+        List<GraphNode> Nodes,
+        List<GraphEdge> Edges,
+        Dictionary<string, (double X, double Y)> Layout,
+        GraphDefaults Defaults,
+        string Name,
+        string? DisplayName,
+        string? Description,
+        Dictionary<string, SubgraphDefinition> Subgraphs);
+
+    private readonly List<EditorSnapshot> undoStack = new();
+    private EditorSnapshot? lastCommitted;
+
+    private string newMetricName = string.Empty;
+    private double newMetricTarget;
+    private string newMetricDirection = "gte";
+
+    private GraphNode? SelectedNode => nodes.FirstOrDefault(node => node.Id == selectedNodeId);
+
+    private static IReadOnlyList<UiField> EdgeFields => EdgeDefinition.Fields.OrderBy(field => field.Order).ToArray();
+
+    private static IReadOnlyList<UiField> GraphScalarFields => Schema.Fields
+        .Where(field => field.Type is UiFieldType.String && !field.IsHidden)
+        .OrderBy(field => field.Order)
+        .ToArray();
+
+    private static UiField? DefaultTeamField => Schema.Field("defaults")?.Field("team");
+    private static UiField? BudgetCostField => Schema.Field("defaults")?.Field("budget")?.Field("costLimitUsd");
+    private static UiField? BudgetTimeField => Schema.Field("defaults")?.Field("budget")?.Field("timeLimitSeconds");
+
+    private void SetTab(string tab) => inspectorTab = tab;
+
+    protected override void OnParametersSet()
+    {
+        if (GraphName is null)
+        {
+            original = null;
+            return;
+        }
+        LoadGraph(Authoring.FindGraph(GraphName));
+    }
+
+    private void LoadGraph(GraphDefinition? graph)
+    {
+        original = graph;
+        if (graph is null)
+        {
+            return;
+        }
+        name = graph.Name;
+        displayName = graph.DisplayName;
+        description = graph.Description;
+        defaults = graph.Defaults ?? new GraphDefaults();
+        nodes = graph.Nodes.ToList();
+        edges = graph.Edges.ToList();
+        layout = new Dictionary<string, (double X, double Y)>(graph.Layout, StringComparer.Ordinal);
+        subgraphs = new Dictionary<string, SubgraphDefinition>(graph.Subgraphs, StringComparer.Ordinal);
+        editingSubgraphId = null;
+        selectedNodeId = null;
+        isDirty = false;
+        diagnostics = null;
+        savedMessage = null;
+        undoStack.Clear();
+        lastCommitted = CaptureSnapshot();
+        Refresh();
+    }
+
+    /// <summary>
+    /// 保存・検証・YAML 表示に使う「ルート」グラフ全体。サブグラフ編集中でも中身は常にルートの nodes/edges/layout で、
+    /// 編集中のサブグラフだけ subgraphs 辞書の該当エントリを最新の内容に差し替える。
+    /// </summary>
+    private GraphDefinition WorkingGraph => (original ?? new GraphDefinition { Name = name, Nodes = [], Edges = [] }) with
+    {
+        Name = name,
+        DisplayName = displayName,
+        Description = description,
+        Defaults = HasDefaults ? defaults : null,
+        Nodes = editingSubgraphId is null ? nodes : rootNodes,
+        Edges = editingSubgraphId is null ? edges : rootEdges,
+        Layout = editingSubgraphId is null ? layout : rootLayout,
+        Subgraphs = editingSubgraphId is null
+            ? subgraphs
+            : new Dictionary<string, SubgraphDefinition>(subgraphs, StringComparer.Ordinal)
+            {
+                [editingSubgraphId] = new SubgraphDefinition { Nodes = nodes, Edges = edges },
+            },
+    };
+
+    /// <summary>キャンバス描画・ナラーションに使う「今編集している範囲」のグラフ。ルート編集中は WorkingGraph と同じ、
+    /// サブグラフ編集中はそのサブグラフの中身 (nodes/edges/layout) を映す。</summary>
+    private GraphDefinition CanvasGraph => WorkingGraph with
+    {
+        Nodes = nodes,
+        Edges = edges,
+        Layout = layout,
+    };
+
+    private bool HasDefaults => !string.IsNullOrWhiteSpace(defaults.Team)
+        || defaults.BudgetCostLimitUsd.HasValue
+        || defaults.BudgetTimeLimitSeconds.HasValue;
+
+    /// <summary>
+    /// 直前の確定状態 (lastCommitted、= 今回の変更が始まる前の状態) を Undo スタックに積んでから、
+    /// 変更後の状態を新しい確定状態にする。呼び出し側は先にフィールドを書き換えてから呼ぶ。
+    /// </summary>
+    private void MarkDirty()
+    {
+        if (lastCommitted is not null)
+        {
+            undoStack.Add(lastCommitted);
+            if (undoStack.Count > 50)
+            {
+                undoStack.RemoveAt(0);
+            }
+        }
+        lastCommitted = CaptureSnapshot();
+        isDirty = true;
+        savedMessage = null;
+        Refresh();
+    }
+
+    private EditorSnapshot CaptureSnapshot() => new(
+        nodes.ToList(),
+        edges.ToList(),
+        new Dictionary<string, (double X, double Y)>(layout, StringComparer.Ordinal),
+        defaults,
+        name,
+        displayName,
+        description,
+        new Dictionary<string, SubgraphDefinition>(subgraphs, StringComparer.Ordinal));
+
+    private void RestoreSnapshot(EditorSnapshot snapshot)
+    {
+        nodes = snapshot.Nodes.ToList();
+        edges = snapshot.Edges.ToList();
+        layout = new Dictionary<string, (double X, double Y)>(snapshot.Layout, StringComparer.Ordinal);
+        defaults = snapshot.Defaults;
+        name = snapshot.Name;
+        displayName = snapshot.DisplayName;
+        description = snapshot.Description;
+        subgraphs = new Dictionary<string, SubgraphDefinition>(snapshot.Subgraphs, StringComparer.Ordinal);
+    }
+
+    /// <summary>直前の変更を取り消す。スコープ (ルート/サブグラフ) をまたいだ undo は扱わない — 切り替え時にスタックを空にしている。</summary>
+    private void Undo()
+    {
+        if (undoStack.Count == 0)
+        {
+            return;
+        }
+        var snapshot = undoStack[^1];
+        undoStack.RemoveAt(undoStack.Count - 1);
+        RestoreSnapshot(snapshot);
+        lastCommitted = snapshot;
+        selectedNodeId = null;
+        selectedEdgeId = null;
+        isDirty = true;
+        savedMessage = null;
+        Refresh();
+    }
+
+    /// <summary>JS から Ctrl+Z で呼ばれる。</summary>
+    [JSInvokable]
+    public void OnUndoShortcut()
+    {
+        Undo();
+        StateHasChanged();
+    }
+
+    private void Refresh()
+    {
+        var canvasGraph = CanvasGraph;
+        referenceOptions = Authoring.BuildReferenceOptions(graph: canvasGraph);
+        narration = DefinitionNarrator.Describe(canvasGraph);
+        displayLayout = ComputeDisplayLayout(canvasGraph);
+        canvasSize = ComputeCanvasSize();
+    }
+
+    private void SelectNode(string nodeId)
+    {
+        selectedNodeId = nodeId;
+        selectedEdgeId = null;
+        inspectorTab = "node";
+    }
+
+    private void SelectEdge(string edgeId)
+    {
+        selectedEdgeId = edgeId;
+        inspectorTab = "edges";
+    }
+
+    private void ClearSelection()
+    {
+        selectedEdgeId = null;
+        selectedNodeId = null;
+    }
+
+    /// <summary>選択ノードに直接つながっている (エッジの一方の端になっている) ノードの ID 集合。選択が変わるたびキャンバス描画で参照する。</summary>
+    private HashSet<string> ConnectedNodeIds => selectedNodeId is null
+        ? EmptyNodeIds
+        : new HashSet<string>(
+            edges.Where(edge => edge.From == selectedNodeId || edge.To == selectedNodeId)
+                 .SelectMany(edge => new[] { edge.From, edge.To })
+                 .Where(id => id != selectedNodeId),
+            StringComparer.Ordinal);
+
+    private static readonly HashSet<string> EmptyNodeIds = new(StringComparer.Ordinal);
+
+    /// <summary>指定ノードを一方の端に持つエッジを、入力 (他ノード→自分) → 出力 (自分→他ノード) の順で並べて返す。</summary>
+    private List<GraphEdge> ConnectedEdges(string nodeId)
+        => edges.Where(edge => edge.From == nodeId || edge.To == nodeId)
+            .OrderBy(edge => edge.From == nodeId)
+            .ToList();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (original is null)
+        {
+            return;
+        }
+        dotNetRef ??= DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("workAgentsGraphEditor.attachEdgeDrag", canvasInnerRef, edgePreviewRef, dotNetRef);
+        await JS.InvokeVoidAsync("workAgentsGraphEditor.attachPan", canvasScrollRef);
+        await JS.InvokeVoidAsync("workAgentsGraphEditor.attachUndoShortcut", dotNetRef);
+    }
+
+    /// <summary>キャンバス上でノードをドラッグして接続したときに JS から呼ばれる。</summary>
+    [JSInvokable]
+    public void OnEdgeDropped(string fromId, string toId)
+    {
+        if (string.IsNullOrWhiteSpace(fromId) || string.IsNullOrWhiteSpace(toId) || fromId == toId)
+        {
+            return;
+        }
+        if (nodes.All(node => node.Id != fromId) || nodes.All(node => node.Id != toId))
+        {
+            return;
+        }
+        if (edges.Any(edge => edge.From == fromId && edge.To == toId))
+        {
+            return;
+        }
+        var created = new GraphEdge { Id = UniqueEdgeId(fromId, toId), From = fromId, To = toId };
+        edges.Add(created);
+        selectedEdgeId = created.Id;
+        inspectorTab = "edges";
+        MarkDirty();
+        StateHasChanged();
+    }
+
+    public void Dispose() => dotNetRef?.Dispose();
+
+    private string TabClass(string tab)
+        => inspectorTab == tab ? "wa-inspector-tab active" : "wa-inspector-tab";
+
+    private bool HasProblem(string nodeId)
+        => diagnostics?.Any(diagnostic => diagnostic.NodeIds.Contains(nodeId, StringComparer.Ordinal)) ?? false;
+
+    // ------------------------------------------------------------ ノード編集
+
+    /// <summary>kind に応じて意味を持つ項目だけを返す (案B)。出し分けの根拠はスキーマの x-ui.showWhen。</summary>
+    private IReadOnlyList<UiField> VisibleNodeFields(GraphNode node)
+        => NodeDefinition.Fields
+            .Where(field => field.Type is UiFieldType.String or UiFieldType.Integer or UiFieldType.Number or UiFieldType.Boolean)
+            .Where(field => !field.Deprecated)
+            .Where(field => field.IsVisible(sibling => NodeValue(node, sibling)))
+            .OrderBy(field => field.Order)
+            .ToArray();
+
+    private static UiField? NodeField(string name) => NodeDefinition.Field(name);
+
+    private string? NodeValue(GraphNode node, string path) => path switch
+    {
+        "id" => node.Id,
+        "kind" => node.Kind.ToString().ToLowerInvariant(),
+        "agent" => node.Agent,
+        "team" => node.Team,
+        "input" => node.Input,
+        "goal" => node.Goal,
+        "body" => node.Body,
+        "title" => node.Title,
+        "summary" => node.Summary,
+        "timeoutSeconds" => node.TimeoutSeconds?.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        "codeFile" => node.CodeFile,
+        "graph" => node.Graph,
+        "joinPolicy" => node.JoinPolicy?.ToString().ToLowerInvariant(),
+        "onPartialFailure" => node.OnPartialFailure?.ToString().ToLowerInvariant(),
+        "alternate" => node.Alternate,
+        "stop.maxIterations" => node.Stop?.MaxIterations.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        "stop.costLimitUsd" => Text(node.Stop?.CostLimitUsd),
+        "stop.timeLimitSeconds" => node.Stop?.TimeLimitSeconds?.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        "stop.scoreThreshold" => Text(node.Stop?.ScoreThreshold),
+        "evaluator.kind" => node.Evaluator?.Kind,
+        "evaluator.node" => node.Evaluator?.Node,
+        "evaluator.agent" => node.Evaluator?.Agent,
+        _ => null,
+    };
+
+    private void SetNodeValue(string path, string? value)
+    {
+        var node = SelectedNode;
+        if (node is null)
+        {
+            return;
+        }
+        var index = nodes.IndexOf(node);
+        var updated = node;
+
+        switch (path)
+        {
+            case "id":
+                var newId = value?.Trim();
+                if (string.IsNullOrWhiteSpace(newId) || newId == node.Id)
+                {
+                    return;
+                }
+                RenameNode(node.Id, newId);
+                return;
+            case "kind":
+                if (Enum.TryParse<NodeKind>(value, ignoreCase: true, out var kind))
+                {
+                    updated = ClearFieldsNotUsedBy(node with { Kind = kind }, kind);
+                }
+                break;
+            case "agent": updated = node with { Agent = value }; break;
+            case "team": updated = node with { Team = value }; break;
+            case "input": updated = node with { Input = value }; break;
+            case "goal": updated = node with { Goal = value }; break;
+            case "body": updated = node with { Body = value }; break;
+            case "title": updated = node with { Title = value }; break;
+            case "summary": updated = node with { Summary = value }; break;
+            case "timeoutSeconds": updated = node with { TimeoutSeconds = ParseInt(value) }; break;
+            case "codeFile": updated = node with { CodeFile = value }; break;
+            case "graph": updated = node with { Graph = value }; break;
+            case "joinPolicy":
+                updated = node with { JoinPolicy = Enum.TryParse<JoinPolicy>(value, true, out var join) ? join : null };
+                break;
+            case "onPartialFailure":
+                updated = node with { OnPartialFailure = Enum.TryParse<PartialFailurePolicy>(value, true, out var failure) ? failure : null };
+                break;
+            case "alternate": updated = node with { Alternate = value }; break;
+            case "stop.maxIterations": updated = node with { Stop = Stop(node) with { MaxIterations = ParseInt(value) ?? 10 } }; break;
+            case "stop.costLimitUsd": updated = node with { Stop = Stop(node) with { CostLimitUsd = ParseDouble(value) } }; break;
+            case "stop.timeLimitSeconds": updated = node with { Stop = Stop(node) with { TimeLimitSeconds = ParseInt(value) } }; break;
+            case "stop.scoreThreshold": updated = node with { Stop = Stop(node) with { ScoreThreshold = ParseDouble(value) } }; break;
+            case "evaluator.kind":
+                updated = string.IsNullOrWhiteSpace(value)
+                    ? node with { Evaluator = null }
+                    : node with { Evaluator = Evaluator(node) with { Kind = value } };
+                break;
+            case "evaluator.node": updated = node with { Evaluator = Evaluator(node) with { Node = value } }; break;
+            case "evaluator.agent": updated = node with { Evaluator = Evaluator(node) with { Agent = value } }; break;
+            default: return;
+        }
+
+        nodes[index] = updated;
+        MarkDirty();
+    }
+
+    private static LoopStopCondition Stop(GraphNode node) => node.Stop ?? new LoopStopCondition();
+
+    private static NodeEvaluatorSpec Evaluator(GraphNode node)
+        => node.Evaluator ?? new NodeEvaluatorSpec { Kind = "agent" };
+
+    /// <summary>
+    /// kind を変えたとき、新しい kind では意味を持たない項目を消す。
+    /// 残しておくと YAML に読み手を惑わせる値が残るため。判定はスキーマの showWhen に従う。
+    /// </summary>
+    private static GraphNode ClearFieldsNotUsedBy(GraphNode node, NodeKind kind)
+    {
+        var kindText = kind.ToString().ToLowerInvariant();
+        bool Applies(string fieldName)
+        {
+            var field = NodeDefinition.Field(fieldName);
+            if (field is null || !field.ShowWhen.TryGetValue("kind", out var allowed))
+            {
+                return true;
+            }
+            return allowed.Contains(kindText, StringComparer.Ordinal);
+        }
+
+        return node with
+        {
+            Agent = Applies("agent") ? node.Agent : null,
+            Team = Applies("team") ? node.Team : null,
+            Input = Applies("input") ? node.Input : null,
+            Goal = Applies("goal") ? node.Goal : null,
+            Body = Applies("body") ? node.Body : null,
+            Title = Applies("title") ? node.Title : null,
+            Summary = Applies("summary") ? node.Summary : null,
+            TimeoutSeconds = Applies("timeoutSeconds") ? node.TimeoutSeconds : null,
+            CodeFile = Applies("codeFile") ? node.CodeFile : null,
+            Graph = Applies("graph") ? node.Graph : null,
+            JoinPolicy = Applies("joinPolicy") ? node.JoinPolicy : null,
+            OnPartialFailure = Applies("onPartialFailure") ? node.OnPartialFailure : null,
+            Alternate = Applies("alternate") ? node.Alternate : null,
+            Stop = kind == NodeKind.Loop ? node.Stop ?? new LoopStopCondition() : null,
+            Evaluator = kind == NodeKind.Loop ? node.Evaluator : null,
+        };
+    }
+
+    /// <summary>ノード ID の変更に合わせて、それを指すエッジと座標も直す。</summary>
+    private void RenameNode(string oldId, string newId)
+    {
+        for (var index = 0; index < nodes.Count; index++)
+        {
+            if (nodes[index].Id == oldId)
+            {
+                nodes[index] = nodes[index] with { Id = newId };
+            }
+            if (nodes[index].Alternate == oldId)
+            {
+                nodes[index] = nodes[index] with { Alternate = newId };
+            }
+        }
+        for (var index = 0; index < edges.Count; index++)
+        {
+            var edge = edges[index];
+            var from = edge.From == oldId ? newId : edge.From;
+            var to = edge.To == oldId ? newId : edge.To;
+            var id = edge.Id == $"{edge.From}-to-{edge.To}" ? $"{from}-to-{to}" : edge.Id;
+            edges[index] = edge with { From = from, To = to, Id = id };
+        }
+        if (layout.Remove(oldId, out var position))
+        {
+            layout[newId] = position;
+        }
+        selectedNodeId = newId;
+        MarkDirty();
+    }
+
+    private void AddNode()
+    {
+        var id = UniqueNodeId("node");
+        var position = NextFreePosition();
+        nodes.Add(new GraphNode { Id = id, Kind = NodeKind.Agent });
+        layout[id] = position;
+        selectedNodeId = id;
+        inspectorTab = "node";
+        MarkDirty();
+    }
+
+    /// <summary>空のサブグラフを1件追加する。LOOP ノードの body 欄などから選べるようにするための最小構成。</summary>
+    private void AddSubgraph()
+    {
+        if (editingSubgraphId is not null)
+        {
+            return;
+        }
+        var id = UniqueSubgraphId("subgraph");
+        subgraphs[id] = new SubgraphDefinition
+        {
+            Nodes = new List<GraphNode> { new GraphNode { Id = "start", Kind = NodeKind.Agent } },
+            Edges = new List<GraphEdge>(),
+        };
+        MarkDirty();
+    }
+
+    /// <summary>キャンバスの編集対象をサブグラフに切り替える。ルートの nodes/edges/layout は退避しておき、戻るときに復元する。</summary>
+    private void EnterSubgraph(string subgraphId)
+    {
+        if (editingSubgraphId is not null || !subgraphs.TryGetValue(subgraphId, out var sub))
+        {
+            return;
+        }
+        rootNodes = nodes;
+        rootEdges = edges;
+        rootLayout = layout;
+        editingSubgraphId = subgraphId;
+        nodes = sub.Nodes.ToList();
+        edges = sub.Edges.ToList();
+        layout = new Dictionary<string, (double X, double Y)>(StringComparer.Ordinal);
+        selectedNodeId = null;
+        selectedEdgeId = null;
+        inspectorTab = "node";
+        undoStack.Clear();
+        lastCommitted = CaptureSnapshot();
+        Refresh();
+    }
+
+    /// <summary>サブグラフ編集を終え、ルートの編集に戻る。編集内容は subgraphs 辞書へ書き戻す。</summary>
+    private void ExitSubgraph()
+    {
+        if (editingSubgraphId is null)
+        {
+            return;
+        }
+        subgraphs[editingSubgraphId] = new SubgraphDefinition { Nodes = nodes, Edges = edges };
+        editingSubgraphId = null;
+        nodes = rootNodes;
+        edges = rootEdges;
+        layout = rootLayout;
+        selectedNodeId = null;
+        selectedEdgeId = null;
+        inspectorTab = "node";
+        undoStack.Clear();
+        lastCommitted = CaptureSnapshot();
+        Refresh();
+    }
+
+    private string UniqueSubgraphId(string prefix)
+    {
+        var candidate = prefix;
+        var counter = 2;
+        while (subgraphs.ContainsKey(candidate))
+        {
+            candidate = $"{prefix}-{counter++}";
+        }
+        return candidate;
+    }
+
+    /// <summary>codeFile を編集するために、それが入っているフォルダを OS のファイラーで開く (ローカル実行前提)。</summary>
+    private void OpenCodeFileFolder(GraphNode node)
+    {
+        if (string.IsNullOrWhiteSpace(original?.FolderPath) || string.IsNullOrWhiteSpace(node.CodeFile))
+        {
+            return;
+        }
+        var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(original.FolderPath, node.CodeFile));
+        var folder = System.IO.File.Exists(fullPath)
+            ? System.IO.Path.GetDirectoryName(fullPath)
+            : (System.IO.Directory.Exists(fullPath) ? fullPath : original.FolderPath);
+        if (string.IsNullOrWhiteSpace(folder) || !System.IO.Directory.Exists(folder))
+        {
+            return;
+        }
+        try
+        {
+            if (System.IO.File.Exists(fullPath))
+            {
+                System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{fullPath}\"");
+            }
+            else
+            {
+                System.Diagnostics.Process.Start("explorer.exe", $"\"{folder}\"");
+            }
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            // ローカル実行以外 (別ホストでの表示等) では開けないことがあるが、致命的ではないので無視する。
+        }
+    }
+
+    private void DeleteSelectedNode()
+    {
+        var node = SelectedNode;
+        if (node is null)
+        {
+            return;
+        }
+        nodes.Remove(node);
+        edges.RemoveAll(edge => edge.From == node.Id || edge.To == node.Id);
+        layout.Remove(node.Id);
+        selectedNodeId = nodes.FirstOrDefault()?.Id;
+        MarkDirty();
+    }
+
+    private string UniqueNodeId(string prefix)
+    {
+        var candidate = prefix;
+        var counter = 2;
+        while (nodes.Any(node => string.Equals(node.Id, candidate, StringComparison.Ordinal)))
+        {
+            candidate = $"{prefix}-{counter++}";
+        }
+        return candidate;
+    }
+
+    private (double X, double Y) NextFreePosition()
+    {
+        var maxX = displayLayout.Values.Select(position => position.X).DefaultIfEmpty(OriginX).Max();
+        return (maxX + NodeWidth + ColumnGap, OriginY);
+    }
+
+    private void AddMetric()
+    {
+        var node = SelectedNode;
+        if (node is null || string.IsNullOrWhiteSpace(newMetricName))
+        {
+            return;
+        }
+        var evaluator = Evaluator(node);
+        var metrics = evaluator.Metrics.Append(new MetricTarget
+        {
+            Name = newMetricName.Trim(),
+            Target = newMetricTarget,
+            Direction = newMetricDirection,
+        }).ToArray();
+        nodes[nodes.IndexOf(node)] = node with { Evaluator = evaluator with { Metrics = metrics } };
+        newMetricName = string.Empty;
+        newMetricTarget = 0;
+        MarkDirty();
+    }
+
+    private void RemoveMetric(MetricTarget metric)
+    {
+        var node = SelectedNode;
+        if (node?.Evaluator is null)
+        {
+            return;
+        }
+        var metrics = node.Evaluator.Metrics.Where(item => item != metric).ToArray();
+        nodes[nodes.IndexOf(node)] = node with { Evaluator = node.Evaluator with { Metrics = metrics } };
+        MarkDirty();
+    }
+
+    // ------------------------------------------------------------ エッジ編集
+
+    private string? EdgeValue(GraphEdge edge, string name) => name switch
+    {
+        "id" => edge.Id,
+        "from" => edge.From,
+        "to" => edge.To,
+        "condition" => edge.Condition,
+        "loopBack" => edge.LoopBack ? "true" : null,
+        _ => null,
+    };
+
+    private void SetEdgeValue(GraphEdge edge, string name, string? value)
+    {
+        var index = edges.IndexOf(edge);
+        if (index < 0)
+        {
+            return;
+        }
+        edges[index] = name switch
+        {
+            "id" => edge with { Id = string.IsNullOrWhiteSpace(value) ? edge.Id : value },
+            "from" => edge with { From = value ?? string.Empty },
+            "to" => edge with { To = value ?? string.Empty },
+            "condition" => edge with { Condition = value },
+            "loopBack" => edge with { LoopBack = string.Equals(value, "true", StringComparison.OrdinalIgnoreCase) },
+            _ => edge,
+        };
+        MarkDirty();
+    }
+
+    private void AddEdge()
+    {
+        var from = SelectedNode?.Id ?? nodes.FirstOrDefault()?.Id ?? string.Empty;
+        var to = nodes.FirstOrDefault(node => node.Id != from)?.Id ?? from;
+        var created = new GraphEdge { Id = UniqueEdgeId(from, to), From = from, To = to };
+        edges.Add(created);
+        selectedEdgeId = created.Id;
+        inspectorTab = "edges";
+        MarkDirty();
+    }
+
+    /// <summary>ノードタブから「+ 出力エッジを追加」を押したときの追加。行き先はエッジタブでそのまま選び直せる。</summary>
+    private void AddEdgeFrom(string fromNodeId)
+    {
+        var to = nodes.FirstOrDefault(node => node.Id != fromNodeId)?.Id ?? fromNodeId;
+        var created = new GraphEdge { Id = UniqueEdgeId(fromNodeId, to), From = fromNodeId, To = to };
+        edges.Add(created);
+        selectedEdgeId = created.Id;
+        MarkDirty();
+    }
+
+    private string UniqueEdgeId(string from, string to)
+    {
+        var candidate = $"{from}-to-{to}";
+        var counter = 2;
+        while (edges.Any(edge => string.Equals(edge.Id, candidate, StringComparison.Ordinal)))
+        {
+            candidate = $"{from}-to-{to}-{counter++}";
+        }
+        return candidate;
+    }
+
+    private void RemoveEdge(GraphEdge edge)
+    {
+        edges.Remove(edge);
+        if (selectedEdgeId == edge.Id)
+        {
+            selectedEdgeId = null;
+        }
+        MarkDirty();
+    }
+
+    // ------------------------------------------------------------ グラフ全体
+
+    private string? GraphValue(string fieldName) => fieldName switch
+    {
+        "name" => name,
+        "displayName" => displayName,
+        "description" => description,
+        _ => null,
+    };
+
+    private void SetGraphValue(string fieldName, string? value)
+    {
+        switch (fieldName)
+        {
+            case "name": name = value?.Trim() ?? string.Empty; break;
+            case "displayName": displayName = value; break;
+            case "description": description = value; break;
+            default: return;
+        }
+        MarkDirty();
+    }
+
+    // ---------------------------------------------------------- 検証 / 保存
+
+    private string? toastMessage;
+    private string? toastKind;
+    private int toastToken;
+
+    private void Validate()
+    {
+        diagnostics = Authoring.ValidateGraph(WorkingGraph);
+        Refresh();
+        ShowToast(
+            diagnostics.Count == 0 ? "検証しました。問題は見つかりませんでした。" : $"検証しました。{diagnostics.Count} 件の問題があります。",
+            diagnostics.Count == 0 ? "success" : "warn");
+    }
+
+    /// <summary>右上に一定時間だけメッセージを出す。連続で押されたら前のタイマーは無視し、最後の1回だけが消灯を担う。</summary>
+    private void ShowToast(string message, string kind)
+    {
+        toastMessage = message;
+        toastKind = kind;
+        var token = ++toastToken;
+        _ = HideToastAfterDelay(token);
+    }
+
+    private async Task HideToastAfterDelay(int token)
+    {
+        await Task.Delay(3500);
+        if (token == toastToken)
+        {
+            toastMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        isSaving = true;
+        try
+        {
+            var result = await Authoring.SaveGraphAsync(WorkingGraph);
+            diagnostics = result.Diagnostics.Count > 0 ? result.Diagnostics : Array.Empty<AuthoringDiagnostic>();
+            if (result.Saved)
+            {
+                var savedName = name;
+                var savedPath = result.Path;
+                LoadGraph(Authoring.FindGraph(savedName) ?? WorkingGraph);
+                savedMessage = $"{savedPath} に保存しました。実行への反映はアプリの再起動後です。";
+                if (!string.Equals(savedName, GraphName, StringComparison.Ordinal))
+                {
+                    Navigation.NavigateTo($"graphs/{savedName}");
+                }
+            }
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    // -------------------------------------------------------------- レイアウト
+
+    private (double X, double Y) PositionOf(string nodeId)
+        => displayLayout.TryGetValue(nodeId, out var position) ? position : (OriginX, OriginY);
+
+    private (double Width, double Height) ComputeCanvasSize()
+    {
+        if (displayLayout.Count == 0)
+        {
+            return (1120, 560);
+        }
+        var maxX = displayLayout.Values.Max(position => position.X);
+        var maxY = displayLayout.Values.Max(position => position.Y);
+        // 下側は迂回ルート (ループバック用レーン) の分だけ余白を多めに確保する。
+        return (Math.Max(1120, maxX + NodeWidth + 40), Math.Max(560, maxY + NodeHeight + 90));
+    }
+
+    private sealed record EdgeGeometry(GraphEdge Edge, double X1, double Y1, double X2, double Y2, string? PathD, double MidX, double MidY);
+
+    /// <summary>
+    /// エッジの描画座標を組み立てる。同じノードに集まる複数のエッジは接続点をずらして重なりを避け (ファンアウト)、
+    /// 列を2つ以上飛ばす転送エッジと loopBack エッジは、他のノードの上を絶対に通らないよう、
+    /// すべてのノードより上/下にある専用レーンを経由する直角の迂回ルートで描く。
+    /// </summary>
+    private List<EdgeGeometry> ComputeEdgeGeometry()
+    {
+        var forward = edges.Where(edge => !edge.LoopBack).ToList();
+        var loopEdges = edges.Where(edge => edge.LoopBack).ToList();
+
+        var outgoingOrder = forward.GroupBy(edge => edge.From, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group.OrderBy(edge => PositionOf(edge.To).Y).Select(edge => edge.Id).ToList(),
+                StringComparer.Ordinal);
+        var incomingOrder = forward.GroupBy(edge => edge.To, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group.OrderBy(edge => PositionOf(edge.From).Y).Select(edge => edge.Id).ToList(),
+                StringComparer.Ordinal);
+
+        double FanOffset(string edgeId, string nodeId, Dictionary<string, List<string>> orderMap)
+        {
+            if (!orderMap.TryGetValue(nodeId, out var list) || list.Count <= 1)
+            {
+                return 0;
+            }
+            var index = list.IndexOf(edgeId);
+            var span = Math.Min(NodeHeight * 0.55, (list.Count - 1) * 13);
+            var step = span / (list.Count - 1);
+            return -span / 2 + step * index;
+        }
+
+        var columnStride = NodeWidth + ColumnGap;
+        var minNodeY = displayLayout.Count == 0 ? OriginY : displayLayout.Values.Min(position => position.Y);
+        var maxNodeBottom = displayLayout.Count == 0 ? OriginY + NodeHeight : displayLayout.Values.Max(position => position.Y) + NodeHeight;
+        var topLaneY = Math.Max(4, minNodeY - 26);
+        var bottomLaneY = maxNodeBottom + 26;
+
+        var result = new List<EdgeGeometry>();
+
+        foreach (var edge in forward)
+        {
+            var from = PositionOf(edge.From);
+            var to = PositionOf(edge.To);
+            var x1 = from.X + NodeWidth;
+            var y1 = from.Y + NodeHeight / 2 + FanOffset(edge.Id, edge.From, outgoingOrder);
+            var x2 = to.X;
+            var y2 = to.Y + NodeHeight / 2 + FanOffset(edge.Id, edge.To, incomingOrder);
+
+            // 隣り合う列同士なら間には何もないので直線で結んでよい。2 列以上離れている場合は
+            // 中間の列に別の行のノードが置かれている可能性があるため、必ず全ノードより上のレーンを経由させる。
+            if (to.X - from.X > columnStride * 1.5 || to.X <= from.X)
+            {
+                var pathData = ElbowPath(x1, y1, x2, y2, topLaneY);
+                result.Add(new EdgeGeometry(edge, x1, y1, x2, y2, pathData, (x1 + x2) / 2, topLaneY));
+            }
+            else
+            {
+                result.Add(new EdgeGeometry(edge, x1, y1, x2, y2, null, (x1 + x2) / 2, (y1 + y2) / 2));
+            }
+        }
+
+        foreach (var edge in loopEdges)
+        {
+            var from = PositionOf(edge.From);
+            var to = PositionOf(edge.To);
+            var x1 = from.X + NodeWidth;
+            var y1 = from.Y + NodeHeight - 14;
+            var x2 = to.X;
+            var y2 = to.Y + NodeHeight - 14;
+            var pathData = ElbowPath(x1, y1, x2, y2, bottomLaneY);
+            result.Add(new EdgeGeometry(edge, x1, y1, x2, y2, pathData, (x1 + x2) / 2, bottomLaneY));
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// ノードの縁から少し伸ばしてから直角に曲げる形の経路を作る。曲がり角がノードのすぐ際に来ないよう、
+    /// 縁から stub 分だけ水平に出てから、レーンへ向けて曲がる。
+    /// </summary>
+    private static string ElbowPath(double x1, double y1, double x2, double y2, double laneY)
+    {
+        const double stub = 22;
+        var stubOutX = x1 + stub;
+        var stubInX = x2 - stub;
+        return FormattableString.Invariant(
+            $"M {x1} {y1} L {stubOutX} {y1} L {stubOutX} {laneY} L {stubInX} {laneY} L {stubInX} {y2} L {x2} {y2}");
+    }
+
+    /// <summary>
+    /// 明示座標と自動座標を表示用に統合し、既存ノードと重なる座標だけを下へ移動する。
+    /// 明示座標は通常そのまま使い、衝突時だけ後続ノードをずらす。
+    /// </summary>
+    private static Dictionary<string, (double X, double Y)> ComputeDisplayLayout(GraphDefinition graph)
+    {
+        var automatic = ComputeAutoLayout(graph);
+        var display = new Dictionary<string, (double X, double Y)>(StringComparer.Ordinal);
+
+        foreach (var item in graph.Nodes.Select((node, index) => (node, index)))
+        {
+            (double X, double Y) position = graph.Layout.TryGetValue(item.node.Id, out var explicitPosition)
+                ? (explicitPosition.X, explicitPosition.Y)
+                : automatic.TryGetValue(item.node.Id, out var computed)
+                    ? computed
+                    : (OriginX + (item.index % 6) * (NodeWidth + ColumnGap), OriginY + (item.index / 6) * (NodeHeight + RowGap));
+
+            while (display.Values.Any(existing => Overlaps(position, existing)))
+            {
+                position = (position.X, position.Y + NodeHeight + RowGap);
+            }
+
+            display[item.node.Id] = position;
+        }
+
+        return display;
+    }
+
+    private static bool Overlaps((double X, double Y) first, (double X, double Y) second) =>
+        first.X < second.X + NodeWidth &&
+        second.X < first.X + NodeWidth &&
+        first.Y < second.Y + NodeHeight &&
+        second.Y < first.Y + NodeHeight;
+
+    /// <summary>
+    /// graph.yaml に layout が無いノードの座標を、edges の到達順 (トポロジカル順) から自動計算する。
+    /// これにより layout セクションは任意のままにできる (座標を手で書かなくてもきれいに並ぶ)。
+    /// loopBack エッジは後退辺なので、段組みの計算からは除外する。
+    /// </summary>
+    private static Dictionary<string, (double X, double Y)> ComputeAutoLayout(GraphDefinition graph)
+    {
+        var nodeIds = graph.Nodes.Select(node => node.Id).ToArray();
+        var forwardEdges = graph.Edges.Where(edge => !edge.LoopBack).ToArray();
+        var outgoing = forwardEdges
+            .GroupBy(edge => edge.From, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Select(edge => edge.To).ToArray(), StringComparer.Ordinal);
+        var incoming = forwardEdges
+            .GroupBy(edge => edge.To, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Select(edge => edge.From).ToArray(), StringComparer.Ordinal);
+
+        var inDegree = nodeIds.ToDictionary(id => id, _ => 0, StringComparer.Ordinal);
+        foreach (var edge in forwardEdges)
+        {
+            if (inDegree.ContainsKey(edge.To))
+            {
+                inDegree[edge.To]++;
+            }
+        }
+
+        var rank = nodeIds.ToDictionary(id => id, _ => 0, StringComparer.Ordinal);
+        var remaining = new Dictionary<string, int>(inDegree, StringComparer.Ordinal);
+        var queue = new Queue<string>(nodeIds.Where(id => inDegree[id] == 0));
+        while (queue.Count > 0)
+        {
+            var id = queue.Dequeue();
+            if (!outgoing.TryGetValue(id, out var targets))
+            {
+                continue;
+            }
+            foreach (var target in targets)
+            {
+                if (!remaining.ContainsKey(target))
+                {
+                    continue;
+                }
+                rank[target] = Math.Max(rank[target], rank[id] + 1);
+                if (--remaining[target] == 0)
+                {
+                    queue.Enqueue(target);
+                }
+            }
+        }
+
+        // 各列 (rank) 内でのノードの並び順。初期値は定義順。
+        var columns = nodeIds
+            .Select((id, index) => (id, index))
+            .GroupBy(item => rank[item.id])
+            .OrderBy(group => group.Key)
+            .ToDictionary(group => group.Key, group => group.OrderBy(item => item.index).Select(item => item.id).ToList());
+
+        ReduceCrossings(columns, incoming, outgoing);
+
+        var layout = new Dictionary<string, (double X, double Y)>(StringComparer.Ordinal);
+        foreach (var column in columns)
+        {
+            for (var row = 0; row < column.Value.Count; row++)
+            {
+                layout[column.Value[row]] = (OriginX + column.Key * (NodeWidth + ColumnGap), OriginY + row * (NodeHeight + RowGap));
+            }
+        }
+        return layout;
+    }
+
+    /// <summary>
+    /// Sugiyama 法の重心 (barycenter) ヒューリスティックで、列内のノード順を隣接列とのエッジ交差が少なくなるように並べ替える。
+    /// 前方 (親の位置基準) と後方 (子の位置基準) を交互に数回スイープし、各ノードを隣接列の平均位置に近づける。
+    /// </summary>
+    private static void ReduceCrossings(
+        Dictionary<int, List<string>> columns,
+        Dictionary<string, string[]> incoming,
+        Dictionary<string, string[]> outgoing)
+    {
+        if (columns.Count < 2)
+        {
+            return;
+        }
+
+        var order = new Dictionary<string, int>(StringComparer.Ordinal);
+        void ReindexColumn(int key)
+        {
+            var column = columns[key];
+            for (var i = 0; i < column.Count; i++)
+            {
+                order[column[i]] = i;
+            }
+        }
+        foreach (var key in columns.Keys)
+        {
+            ReindexColumn(key);
+        }
+
+        double Barycenter(string nodeId, Dictionary<string, string[]> neighborMap)
+        {
+            if (!neighborMap.TryGetValue(nodeId, out var neighbors) || neighbors.Length == 0)
+            {
+                return order[nodeId];
+            }
+            var known = neighbors.Where(order.ContainsKey).ToArray();
+            return known.Length == 0 ? order[nodeId] : known.Average(id => order[id]);
+        }
+
+        var ascending = columns.Keys.OrderBy(key => key).ToArray();
+        var descending = columns.Keys.OrderByDescending(key => key).ToArray();
+
+        for (var sweep = 0; sweep < 4; sweep++)
+        {
+            var forward = sweep % 2 == 0;
+            var neighborMap = forward ? incoming : outgoing;
+            foreach (var key in forward ? ascending : descending)
+            {
+                var column = columns[key];
+                var reordered = column
+                    .Select(id => (id, score: Barycenter(id, neighborMap)))
+                    .OrderBy(item => item.score)
+                    .Select(item => item.id)
+                    .ToList();
+                columns[key] = reordered;
+                ReindexColumn(key);
+            }
+        }
+    }
+
+    private static string NodeMeta(GraphNode node) => node.Kind switch
+    {
+        NodeKind.Agent => node.Agent ?? "agent",
+        NodeKind.Team => node.Team ?? "team",
+        NodeKind.Loop => $"max {node.Stop?.MaxIterations ?? 10}",
+        NodeKind.Approval => "human in the loop",
+        _ => node.Summary ?? node.Kind.ToString().ToLowerInvariant(),
+    };
+
+    private static string? Text(double? value)
+        => value?.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private static int? ParseInt(string? value)
+        => int.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var result)
+            ? result
+            : null;
+
+    private static double? ParseDouble(string? value)
+        => double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var result)
+            ? result
+            : null;
+}

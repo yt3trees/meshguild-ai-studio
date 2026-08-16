@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- GUI のフォーム生成 (案A/B) がスキーマを唯一の真実として読むため、schemas/*.json を埋め込む。
+         配置パスの解決に依存させないよう、ファイル参照ではなく埋め込みリソースにしている。 -->
+    <EmbeddedResource Include="..\..\schemas\*.schema.json" LinkBase="Schemas" />
+  </ItemGroup>
+
+</Project>

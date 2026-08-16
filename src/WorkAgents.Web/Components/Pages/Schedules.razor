@@ -1,0 +1,11 @@
+@page "/schedules"
+@inject NavigationManager Navigation
+
+<PageTitle>MeshGuild AI Studio | Workflows</PageTitle>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Navigation.NavigateTo("workflows", replace: true);
+    }
+}

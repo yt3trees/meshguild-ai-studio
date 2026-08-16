@@ -1,0 +1,172 @@
+@page "/overview"
+@using WorkAgents.Core
+@using WorkAgents.Core.Abstractions
+@inject IAgentRegistry AgentRegistry
+@inject IWorkflowRegistry WorkflowRegistry
+@inject IRunStore RunStore
+@inject IApprovalStore ApprovalStore
+@inject ILlmModelStore ModelStore
+
+<PageTitle>MeshGuild AI Studio | Overview</PageTitle>
+
+<div class="overview-page">
+    <div class="overview-inner">
+        <div class="overview-heading">
+            <div>
+                <h1>Overview</h1>
+                <p>ローカル環境のエージェント実行状況</p>
+            </div>
+            <span class="overview-time">@DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm zzz")</span>
+        </div>
+
+        @if (loadError is not null)
+        {
+            <div class="load-error" role="alert">@loadError</div>
+        }
+
+        <div class="stat-grid">
+            <div class="stat-card">
+                <div class="stat-label">Agents</div>
+                <div class="stat-value">@agents.Count</div>
+                <div class="stat-note">loaded from /agents</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Runs today</div>
+                <div class="stat-value">@runsToday.Count</div>
+                <div class="stat-note stat-note-ok">@SucceededTodayCount succeeded</div>
+            </div>
+            <a class="stat-card stat-card-highlight" href="approvals">
+                <div class="stat-label stat-label-accent">Pending approvals</div>
+                <div class="stat-value">@pendingApprovals.Count</div>
+                <div class="stat-note stat-note-warn">@ApprovalNote →</div>
+            </a>
+            <div class="stat-card">
+                <div class="stat-label">Queue</div>
+                <div class="stat-value">@QueuedCount</div>
+                <div class="stat-note">persisted queued runs</div>
+            </div>
+        </div>
+
+        <div class="panel-grid">
+            <section class="panel">
+                <div class="panel-header">
+                    <span>Recent runs</span>
+                    <a href="observability">View all →</a>
+                </div>
+                @if (recentRuns.Count == 0)
+                {
+                    <div class="run-empty">Run はまだありません。</div>
+                }
+                else
+                {
+                    @foreach (var run in recentRuns)
+                    {
+                        <div class="run-row">
+                            <span class="run-dot @StatusClass(run.Status)"></span>
+                            <span class="run-name">@run.AgentName</span>
+                            <span class="run-id">run @ShortRunId(run.RunId) · @StatusLabel(run.Status)</span>
+                            <span class="run-time">@run.CreatedAt.ToLocalTime().ToString("HH:mm")</span>
+                        </div>
+                    }
+                }
+            </section>
+
+            <section class="panel panel-agents">
+                <div class="panel-header">
+                    <span>Agents</span>
+                </div>
+                @foreach (var agent in agents)
+                {
+                    <a class="agent-row" href="chat">
+                        <span class="agent-mark" aria-hidden="true">●</span>
+                        <span class="agent-info">
+                            <span class="agent-name">@agent.DisplayName</span>
+                            <span class="agent-meta">@agent.Name</span>
+                        </span>
+                        <span class="agent-chevron">›</span>
+                    </a>
+                }
+                <div class="panel-footer">
+                    <div><span>Provider</span><span>@ProviderLabel</span></div>
+                    <div><span>Run store</span><span>@RunStore.GetType().Name</span></div>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+
+@code {
+    private IReadOnlyList<AgentView> agents = Array.Empty<AgentView>();
+    private IReadOnlyList<RunRecord> runs = Array.Empty<RunRecord>();
+    private IReadOnlyList<RunRecord> runsToday = Array.Empty<RunRecord>();
+    private IReadOnlyList<RunRecord> recentRuns = Array.Empty<RunRecord>();
+    private IReadOnlyList<ApprovalRequest> pendingApprovals = Array.Empty<ApprovalRequest>();
+    private IReadOnlyList<LlmModelSettings> models = Array.Empty<LlmModelSettings>();
+    private string? loadError;
+
+    private int SucceededTodayCount => runsToday.Count(run => run.Status == RunStatus.Succeeded);
+    private int QueuedCount => runs.Count(run => run.Status == RunStatus.Queued);
+    private int ExpiringSoonCount => pendingApprovals.Count(approval =>
+        !approval.IsExpired(DateTimeOffset.UtcNow)
+        && approval.ExpiresAt <= DateTimeOffset.UtcNow.AddHours(1));
+    private string ApprovalNote => ExpiringSoonCount == 0
+        ? "none expiring within 1h"
+        : $"{ExpiringSoonCount} expiring within 1h";
+    private string ProviderLabel
+    {
+        get
+        {
+            var defaultModel = models.FirstOrDefault(model => model.IsDefault);
+            return defaultModel is not null
+                ? defaultModel.Provider.ToString()
+                : models.Count == 0
+                    ? "not configured"
+                    : string.Join(", ", models.Select(model => model.Provider).Distinct());
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var workflowNames = WorkflowRegistry.ListWorkflows()
+            .Select(workflow => workflow.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        agents = AgentRegistry.ListAgents()
+            .Where(agent => !workflowNames.Contains(agent.Name))
+            .ToArray();
+
+        try
+        {
+            var runsTask = RunStore.ListAsync();
+            var approvalsTask = ApprovalStore.ListPendingAsync();
+            var modelsTask = ModelStore.ListAsync();
+            await Task.WhenAll(runsTask, approvalsTask, modelsTask);
+
+            runs = await runsTask;
+            var localToday = DateTimeOffset.Now.Date;
+            runsToday = runs.Where(run => run.CreatedAt.ToLocalTime().Date == localToday).ToArray();
+            recentRuns = runs.Take(4).ToArray();
+            pendingApprovals = await approvalsTask;
+            models = await modelsTask;
+        }
+        catch (Exception)
+        {
+            loadError = "Overview データを読み込めませんでした。";
+        }
+    }
+
+    private static string ShortRunId(string runId) => runId[..Math.Min(10, runId.Length)];
+
+    private static string StatusLabel(RunStatus status) => status switch
+    {
+        RunStatus.AwaitingApproval => "awaiting approval",
+        _ => status.ToString().ToLowerInvariant(),
+    };
+
+    private static string StatusClass(RunStatus status) => status switch
+    {
+        RunStatus.Succeeded => "run-dot-ok",
+        RunStatus.Queued or RunStatus.Running or RunStatus.AwaitingApproval => "run-dot-wait",
+        RunStatus.Failed or RunStatus.Aborted => "run-dot-fail",
+        _ => "run-dot-wait",
+    };
+}

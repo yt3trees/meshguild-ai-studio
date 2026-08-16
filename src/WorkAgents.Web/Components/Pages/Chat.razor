@@ -1,0 +1,504 @@
+@page "/chat"
+@using WorkAgents.Core
+@using WorkAgents.Core.Abstractions
+@using System.Diagnostics
+@inject IAgentRegistry AgentRegistry
+@inject IWorkflowRegistry WorkflowRegistry
+@inject ILlmModelStore ModelStore
+@inject IChatTranscriptStore TranscriptStore
+@inject IChatTraceStore TraceStore
+
+<PageTitle>MeshGuild AI Studio | Agents</PageTitle>
+
+<section class="agent-page">
+    @if (SelectedAgent is null)
+    {
+        <div class="agent-directory">
+            <header class="directory-header">
+                <div>
+                    <span class="directory-kicker">Workspace</span>
+                    <h1>Agents</h1>
+                    <p>チャットするAgentを選択してください。</p>
+                </div>
+                <span class="agent-count">@agents.Count agent@(agents.Count == 1 ? "" : "s")</span>
+            </header>
+
+            @if (!agents.Any())
+            {
+                <div class="directory-empty">
+                    <span class="empty-agent-mark" aria-hidden="true">W</span>
+                    <h2>No agents loaded</h2>
+                    <p>Agentを追加してHostを再起動すると、ここに表示されます。</p>
+                </div>
+            }
+            else
+            {
+                <div class="agent-grid" aria-label="Agents">
+                    @foreach (var agent in agents)
+                    {
+                        <button type="button" class="agent-card" data-pw="agent-card" @onclick="() => SelectAgentAsync(agent.Name)">
+                            <span class="agent-card-mark" aria-hidden="true">●</span>
+                            <span class="agent-card-content">
+                                <strong>@agent.DisplayName</strong>
+                                <span class="agent-card-name">@agent.Name</span>
+                                <span class="agent-card-meta">@agent.AttachedSkills.Count skill@(agent.AttachedSkills.Count == 1 ? "" : "s")</span>
+                            </span>
+                            <span class="agent-card-arrow" aria-hidden="true">›</span>
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+    <header class="agent-header">
+        <div class="agent-identity">
+            <button type="button" class="back-button" title="Agent一覧に戻る" aria-label="Agent一覧に戻る" disabled="@IsBusy" @onclick="ShowAgentList">←</button>
+            <span class="agent-avatar" aria-hidden="true">●</span>
+            <div>
+                <h1>@SelectedAgentDisplayName</h1>
+                <span>@(string.IsNullOrWhiteSpace(SelectedAgentName) ? "No agent selected" : SelectedAgentName)</span>
+            </div>
+        </div>
+        <button type="button" class="new-thread-button" title="新しいスレッド" disabled="@IsBusy" @onclick="Clear">
+            <span class="plus" aria-hidden="true">＋</span>
+            <span>New thread</span>
+        </button>
+    </header>
+
+    <div class="agent-tabs" role="tablist" aria-label="エージェントビュー">
+        <button type="button" class="agent-tab @(ActiveTab == "chat" ? "active" : "")" role="tab"
+                aria-selected="@(ActiveTab == "chat")" @onclick='() => ActiveTab = "chat"'>Chat</button>
+        <button type="button" class="agent-tab @(ActiveTab == "skills" ? "active" : "")" role="tab"
+                aria-selected="@(ActiveTab == "skills")" @onclick='() => ActiveTab = "skills"'>
+            Skills
+            @if (SelectedAgent?.AttachedSkills.Count > 0)
+            {
+                <span class="tab-count">@SelectedAgent.AttachedSkills.Count</span>
+            }
+        </button>
+        <button type="button" class="agent-tab @(ActiveTab == "traces" ? "active" : "")" role="tab"
+                aria-selected="@(ActiveTab == "traces")" @onclick='() => ActiveTab = "traces"'>
+            Traces
+            @if (Traces.Count > 0)
+            {
+                <span class="tab-count">@Traces.Count</span>
+            }
+        </button>
+        <button type="button" class="agent-tab" role="tab" aria-selected="false" disabled title="今後実装予定">Evals</button>
+    </div>
+
+    <div class="agent-workspace">
+        @if (ActiveTab == "traces")
+        {
+            <section class="traces-pane" aria-label="このスレッドの実行トレース">
+                @if (Traces.Count == 0)
+                {
+                    <div class="conversation-empty">
+                        <span class="empty-agent-mark" aria-hidden="true">T</span>
+                        <h2>No traces yet</h2>
+                        <p>メッセージを送信すると、このスレッドの実行トレース(所要時間・モデル・成否)が記録されます。</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="trace-list">
+                        @foreach (var trace in Traces)
+                        {
+                            <article class="trace-row @(trace.Success ? "" : "trace-row-error")">
+                                <span class="trace-status @(trace.Success ? "trace-status-ok" : "trace-status-fail")" aria-hidden="true"></span>
+                                <div class="trace-main">
+                                    <div class="trace-headline">
+                                        <span>@trace.ModelName · @trace.Provider</span>
+                                        <span class="trace-time">@trace.CreatedAt.ToLocalTime().ToString("HH:mm:ss")</span>
+                                    </div>
+                                    @if (!trace.Success)
+                                    {
+                                        <div class="trace-error">@trace.ErrorMessage</div>
+                                    }
+                                </div>
+                                <span class="trace-duration">@trace.DurationMs ms</span>
+                            </article>
+                        }
+                    </div>
+                }
+            </section>
+        }
+        else if (ActiveTab == "skills")
+        {
+            <section class="skills-pane" aria-label="紐づいているSkill一覧">
+                @if (SelectedAgent?.AttachedSkills.Count > 0)
+                {
+                    <div class="skill-list skill-list-main">
+                        @foreach (var skill in SelectedAgent.AttachedSkills)
+                        {
+                            <details class="skill-details" open>
+                                <summary>
+                                    <span class="skill-badge">@skill.Name <small>@(skill.Source == "local" ? "local" : "shared")</small></span>
+                                </summary>
+                                <pre class="skill-content">@skill.Content</pre>
+                            </details>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="conversation-empty">
+                        <span class="empty-agent-mark" aria-hidden="true">S</span>
+                        <h2>No skills attached</h2>
+                        <p>@SelectedAgentDisplayName has no skills configured in agent.yaml.</p>
+                    </div>
+                }
+            </section>
+        }
+        else
+        {
+        <section class="conversation-pane" aria-label="チャット">
+            <div class="conversation-scroll" aria-live="polite">
+                @if (Messages.Count == 0)
+                {
+                    <div class="conversation-empty">
+                        <span class="empty-glow" aria-hidden="true"></span>
+                        <span class="empty-agent-mark" aria-hidden="true">W</span>
+                        <h2>Start a conversation</h2>
+                        <p>@SelectedAgentDisplayName is ready for your request.</p>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var message in Messages)
+                    {
+                        @if (message.Role == "user")
+                        {
+                            <div class="message user-message" data-pw="user-message">
+                                <div class="message-label">You</div>
+                                <div class="message-body">@message.Content</div>
+                            </div>
+                        }
+                        else if (message.IsError)
+                        {
+                            <div class="error-message" role="alert">@message.Content</div>
+                        }
+                        else
+                        {
+                            <div class="message agent-message">
+                                <span class="message-avatar" aria-hidden="true">●</span>
+                                <div class="message-main">
+                                    <div class="message-label">@SelectedAgentDisplayName</div>
+                            <pre class="message-body" data-pw="agent-response">@message.Content</pre>
+                                </div>
+                            </div>
+                        }
+                    }
+
+                    @if (IsBusy)
+                    {
+                        <div class="message agent-message">
+                            <span class="message-avatar" aria-hidden="true">●</span>
+                            <div class="message-main">
+                                <div class="message-label">@SelectedAgentDisplayName</div>
+                                <div class="message-body thinking">Thinking…</div>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+
+            <div class="composer-wrap">
+                <div class="composer">
+            <textarea id="promptInput" data-pw="chat-input" rows="3" @bind="UserInput" @bind:event="oninput" disabled="@IsBusy"
+                              @onkeydown="HandleComposerKeyDownAsync"
+                              placeholder="Enter your message..." aria-label="メッセージ"></textarea>
+                    <div class="composer-footer">
+                        <span class="thread-id">thread @ThreadId[..8]</span>
+                        <div class="composer-actions">
+                            <span class="send-hint" aria-hidden="true">Ctrl+⏎ send</span>
+                            <button type="button" class="send-button" data-pw="chat-send"
+                                    disabled="@(IsBusy || EffectiveModel is null || string.IsNullOrWhiteSpace(SelectedAgentName) || string.IsNullOrWhiteSpace(UserInput))"
+                                    @onclick="SendAsync" title="送信">
+                                <span aria-hidden="true">@(IsBusy ? "…" : "↑")</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        }
+
+        <aside class="settings-pane" aria-label="エージェント設定">
+            <div class="settings-title">
+                <span class="settings-avatar" aria-hidden="true">●</span>
+                <div>
+                    <strong>@SelectedAgentDisplayName</strong>
+                    <span>@SelectedAgentName</span>
+                </div>
+            </div>
+
+            <div class="settings-tabs">
+                <span class="active">Overview</span>
+                <span>Model settings</span>
+            </div>
+
+            <div class="settings-content">
+                <div class="setting-group">
+                    <label for="agentSelect">Agent</label>
+                    <select id="agentSelect" class="form-select" @bind="SelectedAgentName" @bind:after="AgentChangedAsync">
+                        @if (!agents.Any())
+                        {
+                            <option value="">No agents loaded</option>
+                        }
+                        else
+                        {
+                            @foreach (var agent in agents)
+                            {
+                                <option value="@agent.Name">@agent.DisplayName</option>
+                            }
+                        }
+                    </select>
+                </div>
+
+                <div class="setting-group">
+                    <label>Attached skills</label>
+                    @if (SelectedAgent?.AttachedSkills.Count > 0)
+                    {
+                        <button type="button" class="setting-value setting-value-link" @onclick='() => ActiveTab = "skills"'>
+                            <span>@SelectedAgent.AttachedSkills.Count skill@(SelectedAgent.AttachedSkills.Count == 1 ? "" : "s")</span>
+                            <span class="setting-value-arrow" aria-hidden="true">Skillsタブで見る ›</span>
+                        </button>
+                    }
+                    else
+                    {
+                        <div class="setting-value">No skills attached</div>
+                    }
+                </div>
+
+                <div class="setting-group">
+                    <label for="modelSelect">Model</label>
+                    <select id="modelSelect" class="form-select" @bind="SelectedModelId" @bind:after="ModelChangedAsync">
+                        <option value="">Default model</option>
+                        @foreach (var model in models)
+                        {
+                            <option value="@model.Id">@model.Name · @model.DeploymentName</option>
+                        }
+                    </select>
+                </div>
+
+                @if (EffectiveModel is not null)
+                {
+                    <div class="setting-group">
+                        <label>Model provider</label>
+                        <div class="setting-value">
+                            <span class="provider-mark" aria-hidden="true"></span>
+                            <span>@EffectiveModel.Provider</span>
+                        </div>
+                    </div>
+                    <div class="setting-group">
+                        <label>Deployment</label>
+                        <div class="setting-code">@EffectiveModel.DeploymentName</div>
+                    </div>
+                }
+                else
+                {
+                    <div class="model-warning" role="alert" data-pw="chat-no-model">
+                        No model configured. <a href="models">Add a model</a> to run this agent.
+                    </div>
+                }
+
+                <div class="setting-divider"></div>
+
+                <div class="setting-summary">
+                    <div>
+                        <span>Memory</span>
+                        <span class="setting-state">session only</span>
+                    </div>
+                    <div>
+                        <span>Tools</span>
+                        <span class="setting-state">configured by agent</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+    }
+</section>
+
+@code {
+    private IReadOnlyList<AgentView> agents = Array.Empty<AgentView>();
+    private IReadOnlyList<LlmModelSettings> models = Array.Empty<LlmModelSettings>();
+    private string SelectedAgentName = "";
+    private string SelectedModelId = "";
+    private string UserInput = "";
+    private string ThreadId = Guid.NewGuid().ToString("N");
+    private string ActiveTab = "chat";
+    private readonly List<ChatMessage> Messages = [];
+    private readonly List<ChatTraceEntry> Traces = [];
+    private bool IsBusy;
+
+    private sealed record ChatMessage(string Role, string Content, bool IsError = false);
+
+    private string SelectedAgentDisplayName =>
+        SelectedAgent?.DisplayName ?? "Agent";
+
+    private AgentView? SelectedAgent =>
+        agents.FirstOrDefault(agent => agent.Name == SelectedAgentName);
+
+    private LlmModelSettings? EffectiveModel =>
+        models.FirstOrDefault(model => model.Id == SelectedModelId)
+        ?? models.FirstOrDefault(model => model.IsDefault);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var workflowNames = WorkflowRegistry.ListWorkflows()
+            .Select(workflow => workflow.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        agents = AgentRegistry.ListAgents()
+            .Where(agent => !workflowNames.Contains(agent.Name))
+            .ToArray();
+        models = await ModelStore.ListAsync();
+    }
+
+    private async Task AgentChangedAsync()
+    {
+        await LoadAgentModelAsync();
+        await ResumeOrStartThreadAsync();
+    }
+
+    private async Task SelectAgentAsync(string agentName)
+    {
+        SelectedAgentName = agentName;
+        await LoadAgentModelAsync();
+        await ResumeOrStartThreadAsync();
+    }
+
+    /// <summary>
+    /// 選択中Agentの直近スレッドがあれば会話ログ(表示用)を読み込んで再開し、無ければ新規スレッドにする。
+    /// 実際の会話継続性(MAF Agent session)は threadId を通じて ISessionStore が別途担う。
+    /// </summary>
+    private async Task ResumeOrStartThreadAsync()
+    {
+        UserInput = "";
+        ActiveTab = "chat";
+        Messages.Clear();
+        Traces.Clear();
+
+        var latestThreadId = string.IsNullOrWhiteSpace(SelectedAgentName)
+            ? null
+            : await TranscriptStore.GetLatestThreadIdAsync(SelectedAgentName);
+        if (latestThreadId is null)
+        {
+            ThreadId = Guid.NewGuid().ToString("N");
+            return;
+        }
+
+        ThreadId = latestThreadId;
+        var entries = await TranscriptStore.ListAsync(latestThreadId);
+        Messages.AddRange(entries.Select(entry => new ChatMessage(entry.Role, entry.Content, entry.IsError)));
+        Traces.AddRange(await TraceStore.ListAsync(latestThreadId));
+    }
+
+    private async Task LoadAgentModelAsync()
+    {
+        SelectedModelId = string.IsNullOrWhiteSpace(SelectedAgentName)
+            ? ""
+            : await ModelStore.GetAgentModelIdAsync(SelectedAgentName) ?? "";
+    }
+
+    private void ShowAgentList()
+    {
+        SelectedAgentName = "";
+        SelectedModelId = "";
+        Clear();
+    }
+
+    private async Task ModelChangedAsync()
+    {
+        if (string.IsNullOrWhiteSpace(SelectedAgentName))
+        {
+            return;
+        }
+
+        await ModelStore.AssignAgentAsync(
+            SelectedAgentName,
+            string.IsNullOrWhiteSpace(SelectedModelId) ? null : SelectedModelId);
+        Clear();
+    }
+
+    private async Task HandleComposerKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && e.CtrlKey && !IsBusy && EffectiveModel is not null
+            && !string.IsNullOrWhiteSpace(SelectedAgentName) && !string.IsNullOrWhiteSpace(UserInput))
+        {
+            await SendAsync();
+        }
+    }
+
+    private async Task SendAsync()
+    {
+        var prompt = UserInput;
+        UserInput = "";
+        Messages.Add(new ChatMessage("user", prompt));
+        await AppendTranscriptAsync("user", prompt, IsError: false);
+        IsBusy = true;
+
+        var model = EffectiveModel;
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            var response = await AgentRegistry.RunAsync(
+                SelectedAgentName,
+                prompt,
+                workingDirectory: null,
+                threadId: ThreadId,
+                runId: null);
+            Messages.Add(new ChatMessage("agent", response));
+            await AppendTranscriptAsync("agent", response, IsError: false);
+            await AppendTraceAsync(model, stopwatch.ElapsedMilliseconds, success: true, error: null);
+        }
+        catch (Exception ex)
+        {
+            var message = $"{ex.GetType().Name}: {ex.Message}";
+            Messages.Add(new ChatMessage("agent", message, IsError: true));
+            await AppendTranscriptAsync("agent", message, IsError: true);
+            await AppendTraceAsync(model, stopwatch.ElapsedMilliseconds, success: false, error: message);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private async Task AppendTraceAsync(LlmModelSettings? model, long durationMs, bool success, string? error)
+    {
+        var entry = new ChatTraceEntry
+        {
+            ThreadId = ThreadId,
+            AgentName = SelectedAgentName,
+            ModelName = model?.Name,
+            Provider = model?.Provider.ToString(),
+            DurationMs = durationMs,
+            Success = success,
+            ErrorMessage = error,
+        };
+        Traces.Add(entry);
+        await TraceStore.AppendAsync(entry);
+    }
+
+    private Task AppendTranscriptAsync(string role, string content, bool IsError) => TranscriptStore.AppendAsync(new ChatTranscriptEntry
+    {
+        ThreadId = ThreadId,
+        AgentName = SelectedAgentName,
+        Role = role,
+        Content = content,
+        IsError = IsError,
+    });
+
+    private void Clear()
+    {
+        UserInput = "";
+        Messages.Clear();
+        Traces.Clear();
+        ActiveTab = "chat";
+        ThreadId = Guid.NewGuid().ToString("N");
+    }
+}

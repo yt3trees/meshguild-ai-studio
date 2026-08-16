@@ -1,0 +1,51 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "WorkAgents.Web",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "prepare WorkAgents.Web",
+      "program": "${workspaceFolder}/src/WorkAgents.Web/bin/Debug/net10.0/WorkAgents.Web.dll",
+      "cwd": "${workspaceFolder}/src/WorkAgents.Web",
+      "stopAtEntry": false,
+      "hotReloadProfile": "aspnetcore",
+      "console": "internalConsole",
+      "internalConsoleOptions": "openOnSessionStart",
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://localhost:5049"
+      },
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+      }
+    },
+    {
+      "name": "WorkAgents.Run API",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build WorkAgents.Run API",
+      "program": "${workspaceFolder}/src/WorkAgents.Host/bin/Debug/net10.0/WorkAgents.Host.dll",
+      "cwd": "${workspaceFolder}/src/WorkAgents.Host",
+      "stopAtEntry": false,
+      "hotReloadProfile": "aspnetcore",
+      "console": "internalConsole",
+      "internalConsoleOptions": "openOnSessionStart",
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://localhost:5160"
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "WorkAgents (Web + Run API)",
+      "configurations": [
+        "WorkAgents.Web",
+        "WorkAgents.Run API"
+      ],
+      "stopAll": true
+    }
+  ]
+}

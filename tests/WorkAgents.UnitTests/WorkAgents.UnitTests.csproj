@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\WorkAgents.Host\WorkAgents.Host.csproj" />
+    <ProjectReference Include="..\..\src\WorkAgents.Agents\WorkAgents.Agents.csproj" />
+    <ProjectReference Include="..\..\src\WorkAgents.Core\WorkAgents.Core.csproj" />
+    <ProjectReference Include="..\..\src\WorkAgents.Infrastructure\WorkAgents.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\WorkAgents.Orchestration\WorkAgents.Orchestration.csproj" />
+    <ProjectReference Include="..\..\src\WorkAgents.Tray\WorkAgents.Tray.csproj" />
+  </ItemGroup>
+
+</Project>

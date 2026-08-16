@@ -1,0 +1,208 @@
+@page "/observability"
+@implements IAsyncDisposable
+@using WorkAgents.Core
+@using WorkAgents.Core.Abstractions
+@inject IRunStore RunStore
+@inject IConfiguration Configuration
+
+<PageTitle>MeshGuild AI Studio | Observability</PageTitle>
+
+<div class="obs-page">
+    <div class="obs-inner">
+        <div class="obs-heading">
+            <div>
+                <h1>Observability</h1>
+                <p>OpenTelemetry と永続化された Run の実行状況</p>
+            </div>
+            <span class="exporter-badge"><span class="status-dot status-dot-on"></span>@ExporterLabel</span>
+        </div>
+
+        @if (loadError is not null)
+        {
+            <div class="load-error" role="alert">@loadError</div>
+        }
+
+        <div class="stat-grid">
+            <div class="stat-card">
+                <div class="stat-label">Runs (24h)</div>
+                <div class="stat-value">@runs24h.Count</div>
+                <div class="stat-note">@ActiveCount active · @SucceededCount succeeded</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Avg run duration</div>
+                <div class="stat-value">@FormatDuration(AverageDuration)</div>
+                <div class="stat-note">p95 @FormatDuration(P95Duration)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Errors (24h)</div>
+                <div class="stat-value @(ErrorCount > 0 ? "stat-value-danger" : null)">@ErrorCount</div>
+                <div class="stat-note">failed + aborted runs</div>
+            </div>
+        </div>
+
+        <section class="panel timeline-panel">
+            <div class="panel-header">
+                <span>Run timeline</span>
+                <span class="panel-header-sub">SQLite · refresh 5s</span>
+            </div>
+            <div class="timeline-header">
+                <span class="timeline-status-col">Status</span><span>Run</span><span>Duration</span><span>Started</span>
+            </div>
+            @if (recentRuns.Count == 0)
+            {
+                <div class="timeline-empty">Run はまだありません。</div>
+            }
+            else
+            {
+                @foreach (var run in recentRuns)
+                {
+                    <div class="timeline-row">
+                        <span class="badge @StatusClass(run.Status)">@StatusLabel(run.Status)</span>
+                        <span class="run-info">
+                            <span class="run-name">@run.AgentName · run @ShortRunId(run.RunId)</span>
+                            <span class="run-bar @BarClass(run.Status)" style="width:@BarWidth(run)%"></span>
+                        </span>
+                        <span class="run-duration">@FormatDuration(Duration(run))</span>
+                        <span class="run-time">@run.CreatedAt.ToLocalTime().ToString("HH:mm")</span>
+                    </div>
+                }
+            }
+        </section>
+
+        <section class="panel exporter-panel">
+            <div class="panel-header">
+                <span>Exporter configuration</span>
+                <span class="panel-header-sub">WorkAgentsTelemetryExtensions</span>
+            </div>
+            <div class="exporter-row">
+                <span class="exporter-info"><code>OTEL_EXPORTER_OTLP_ENDPOINT</code><span>OTLP trace exporter の送信先</span></span>
+                <span class="exporter-value">@OtlpEndpoint</span>
+            </div>
+            <div class="exporter-row exporter-row-last">
+                <span class="exporter-info"><code>OTEL_CONSOLE_DISABLED</code><span>Console trace exporter の停止設定</span></span>
+                <span class="exporter-value">@ConsoleDisabled.ToString().ToLowerInvariant()</span>
+            </div>
+        </section>
+    </div>
+</div>
+
+@code {
+    private readonly CancellationTokenSource refreshCancellation = new();
+    private IReadOnlyList<RunRecord> runs24h = Array.Empty<RunRecord>();
+    private IReadOnlyList<RunRecord> recentRuns = Array.Empty<RunRecord>();
+    private string? loadError;
+
+    private string OtlpEndpoint => Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"] ?? "unset";
+    private bool ConsoleDisabled => Configuration.GetValue("OTEL_CONSOLE_DISABLED", false);
+    private string ExporterLabel => OtlpEndpoint == "unset" ? (ConsoleDisabled ? "export disabled" : "console exporter") : "OTLP exporter";
+    private int ActiveCount => runs24h.Count(run => run.Status is RunStatus.Queued or RunStatus.Running or RunStatus.AwaitingApproval);
+    private int SucceededCount => runs24h.Count(run => run.Status == RunStatus.Succeeded);
+    private int ErrorCount => runs24h.Count(run => run.Status is RunStatus.Failed or RunStatus.Aborted);
+    private IReadOnlyList<TimeSpan> CompletedDurations => runs24h
+        .Where(run => run.CompletedAt.HasValue)
+        .Select(Duration)
+        .OrderBy(duration => duration)
+        .ToArray();
+    private TimeSpan? AverageDuration => CompletedDurations.Count == 0
+        ? null
+        : TimeSpan.FromTicks((long)CompletedDurations.Average(duration => duration.Ticks));
+    private TimeSpan? P95Duration => CompletedDurations.Count == 0
+        ? null
+        : CompletedDurations[(int)Math.Ceiling(CompletedDurations.Count * 0.95) - 1];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync(refreshCancellation.Token);
+        _ = RefreshLoopAsync(refreshCancellation.Token);
+    }
+
+    private async Task RefreshLoopAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                await LoadAsync(cancellationToken);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    private async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var allRuns = await RunStore.ListAsync(cancellationToken);
+            var cutoff = DateTimeOffset.UtcNow.AddHours(-24);
+            runs24h = allRuns.Where(run => run.CreatedAt >= cutoff).ToArray();
+            recentRuns = allRuns.Take(20).ToArray();
+            loadError = null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            loadError = "Run データを読み込めませんでした。";
+        }
+    }
+
+    private static TimeSpan Duration(RunRecord run)
+    {
+        var start = run.StartedAt ?? run.CreatedAt;
+        var end = run.CompletedAt ?? DateTimeOffset.UtcNow;
+        return end > start ? end - start : TimeSpan.Zero;
+    }
+
+    private double BarWidth(RunRecord run)
+    {
+        var maxSeconds = recentRuns.Select(Duration).DefaultIfEmpty(TimeSpan.FromSeconds(1)).Max(duration => duration.TotalSeconds);
+        return Math.Clamp(Duration(run).TotalSeconds / Math.Max(maxSeconds, 1) * 100, 4, 100);
+    }
+
+    private static string FormatDuration(TimeSpan? duration)
+    {
+        if (!duration.HasValue)
+        {
+            return "—";
+        }
+
+        var value = duration.Value;
+        return value.TotalHours >= 1
+            ? $"{(int)value.TotalHours}h {value.Minutes}m"
+            : value.TotalMinutes >= 1
+                ? $"{(int)value.TotalMinutes}m {value.Seconds}s"
+                : $"{Math.Max(0, (int)value.TotalSeconds)}s";
+    }
+
+    private static string ShortRunId(string runId) => runId[..Math.Min(10, runId.Length)];
+    private static string StatusLabel(RunStatus status) => status switch
+    {
+        RunStatus.AwaitingApproval => "waiting",
+        RunStatus.Succeeded => "success",
+        RunStatus.Aborted => "aborted",
+        _ => status.ToString().ToLowerInvariant(),
+    };
+    private static string StatusClass(RunStatus status) => status switch
+    {
+        RunStatus.Succeeded => "badge-ok",
+        RunStatus.AwaitingApproval or RunStatus.Queued => "badge-wait",
+        RunStatus.Failed or RunStatus.Aborted => "badge-fail",
+        _ => "badge-run",
+    };
+    private static string BarClass(RunStatus status) => status switch
+    {
+        RunStatus.Succeeded => "run-bar-ok",
+        RunStatus.AwaitingApproval or RunStatus.Queued => "run-bar-wait",
+        RunStatus.Failed or RunStatus.Aborted => "run-bar-fail",
+        _ => "run-bar-run",
+    };
+
+    public ValueTask DisposeAsync()
+    {
+        refreshCancellation.Cancel();
+        refreshCancellation.Dispose();
+        return ValueTask.CompletedTask;
+    }
+}

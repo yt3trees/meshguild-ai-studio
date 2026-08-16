@@ -1,0 +1,9 @@
+kind: Prompt
+name: meeting-agent
+displayName: Meeting Minutes Agent
+description: 議事録・会議メモを整理・整形するエージェント(成果物のみ・シェル不要)。共有スキル meeting-minutes を on-demand ロードして使う。
+skills:
+  - meeting-minutes
+harness:
+  shell: false
+  fileStore: artifacts

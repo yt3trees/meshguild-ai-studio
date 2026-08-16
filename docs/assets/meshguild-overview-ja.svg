@@ -1,0 +1,164 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 650" role="img" aria-labelledby="title desc">
+  <title id="title">MeshGuild AI Studio: ミッションから成果物まで</title>
+  <desc id="desc">人がミッションを渡し、Team または Graph で複数の AI エージェントを動かし、人が実行を観測して承認し、成果物を受け取る流れを示す図。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#11141d" />
+      <stop offset="0.55" stop-color="#090a0f" />
+      <stop offset="1" stop-color="#0d1018" />
+    </linearGradient>
+    <linearGradient id="heroGlow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#6d96ff" stop-opacity="0.25" />
+      <stop offset="1" stop-color="#b48ee0" stop-opacity="0" />
+    </linearGradient>
+    <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+      <circle cx="1" cy="1" r="0.8" fill="#8994bd" opacity="0.16" />
+    </pattern>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6d96ff" />
+    </marker>
+    <style>
+      .text { fill: #f0f0f5; font-family: Arial, "Noto Sans JP", sans-serif; }
+      .body { fill: #d1d3dc; font-family: Arial, "Noto Sans JP", sans-serif; }
+      .muted { fill: #aeb2c0; font-family: Arial, "Noto Sans JP", sans-serif; }
+      .faint { fill: #9297a8; font-family: Arial, "Noto Sans JP", sans-serif; }
+      .mono { fill: #9297aa; font-family: "Courier New", Consolas, monospace; letter-spacing: 1.2px; }
+      .blue { fill: #a4b9f5; }
+      .green { fill: #a8efca; }
+      .purple { fill: #d0b6ee; }
+      .amber { fill: #efd28f; }
+      .card { fill: #12151d; stroke: #2a2f3d; stroke-width: 1; }
+      .line { fill: none; stroke: #536da9; stroke-width: 1.5; }
+      .soft-line { fill: none; stroke: #38435f; stroke-width: 1; stroke-dasharray: 3 5; }
+      .bar-bg { fill: #282b35; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="650" fill="url(#bg)" />
+  <rect width="1200" height="650" fill="url(#dots)" opacity="0.42" />
+  <rect x="40" y="91" width="530" height="2" fill="url(#heroGlow)" />
+  <circle cx="1100" cy="-36" r="260" fill="none" stroke="#6d96ff" stroke-opacity="0.08" />
+  <circle cx="1100" cy="-36" r="315" fill="none" stroke="#6d96ff" stroke-opacity="0.035" stroke-width="24" />
+
+  <!-- Header -->
+  <line x1="40" y1="67" x2="1160" y2="67" stroke="#292d39" />
+  <rect x="40" y="27" width="30" height="30" rx="8" fill="#4c75e5" stroke="#9db4f5" stroke-opacity="0.45" />
+  <text x="55" y="48" text-anchor="middle" class="text" font-size="14" font-weight="700">M</text>
+  <text x="82" y="48" class="text" font-size="18" font-weight="600">MeshGuild</text>
+  <text x="193" y="48" class="mono blue" font-size="11">AI STUDIO</text>
+  <text x="1160" y="46" text-anchor="end" class="mono" font-size="9">LOCAL-FIRST / HUMAN-IN-THE-LOOP</text>
+
+  <!-- Hero -->
+  <text x="40" y="113" class="mono blue" font-size="10">AI AGENT ORCHESTRATION FOR REAL WORK</text>
+  <text x="40" y="154" class="text" font-size="31" font-weight="600" letter-spacing="-1.6">ミッションを渡す。</text>
+  <text x="40" y="190" class="blue" font-family="Arial, Noto Sans JP, sans-serif" font-size="31" font-weight="600" letter-spacing="-1.6">AIの仕事を、見届ける。</text>
+  <text x="40" y="218" class="muted" font-size="12">複数のエージェントをチームやグラフで動かし、会話・承認・成果物まで一つの流れで観測する。</text>
+
+  <rect x="812" y="103" width="348" height="111" rx="11" fill="#0b0e16" stroke="#2e3d62" />
+  <text x="834" y="126" class="mono" font-size="9">MISSION FLOW</text>
+  <path d="M840 168 H918 L984 144 L1050 181 H1134" class="line" marker-end="url(#arrow)" />
+  <circle cx="840" cy="168" r="8" fill="#17213a" stroke="#6d96ff" />
+  <circle cx="918" cy="168" r="10" fill="#17213a" stroke="#6d96ff" />
+  <circle cx="984" cy="144" r="9" fill="#21192c" stroke="#b48ee0" />
+  <circle cx="1050" cy="181" r="11" fill="#12221d" stroke="#3dd68c" />
+  <circle cx="1134" cy="181" r="8" fill="#2b2517" stroke="#efd28f" />
+  <text x="840" y="191" text-anchor="middle" class="mono blue" font-size="8">GOAL</text>
+  <text x="918" y="191" text-anchor="middle" class="mono blue" font-size="8">PATH</text>
+  <text x="984" y="113" text-anchor="middle" class="mono purple" font-size="8">AGENTS</text>
+  <text x="1050" y="203" text-anchor="middle" class="mono green" font-size="8">RUN</text>
+  <text x="1134" y="203" text-anchor="middle" class="mono amber" font-size="8">HUMAN</text>
+
+  <!-- Flow heading -->
+  <text x="40" y="267" class="mono blue" font-size="10">THE WORK LOOP</text>
+  <line x1="153" y1="263" x2="1160" y2="263" stroke="#292d39" />
+
+  <!-- Flow arrows -->
+  <path d="M242 386 H268" class="line" marker-end="url(#arrow)" />
+  <path d="M476 386 H512" class="line" marker-end="url(#arrow)" />
+  <path d="M718 386 H756" class="line" marker-end="url(#arrow)" />
+  <path d="M960 386 H1000" class="line" marker-end="url(#arrow)" />
+
+  <!-- 01 Mission -->
+  <rect x="40" y="292" width="202" height="188" rx="10" class="card" stroke="#4568bd" />
+  <line x1="41" y1="293" x2="241" y2="293" stroke="#6d96ff" stroke-width="2" />
+  <text x="58" y="317" class="mono blue" font-size="9">01 / INPUT</text>
+  <circle cx="69" cy="348" r="12" fill="#17213a" stroke="#6d96ff" />
+  <path d="M69 341 V355 M62 348 H76" stroke="#a4b9f5" stroke-width="1.1" />
+  <text x="90" y="354" class="text" font-size="17" font-weight="600">ミッション</text>
+  <text x="58" y="382" class="body" font-size="13">人が目標を渡す。</text>
+  <rect x="58" y="402" width="166" height="52" rx="6" fill="#151d34" stroke="#314b8b" />
+  <text x="69" y="418" class="mono blue" font-size="8">GOAL</text>
+  <text x="69" y="433" class="body" font-size="10">顧客の声を分析して、</text>
+  <text x="69" y="446" class="body" font-size="10">次の機能案をまとめる</text>
+
+  <!-- 02 Team or Graph -->
+  <rect x="274" y="292" width="202" height="188" rx="10" class="card" stroke="#536da9" />
+  <line x1="275" y1="293" x2="475" y2="293" stroke="#6d96ff" stroke-width="2" />
+  <text x="292" y="317" class="mono blue" font-size="9">02 / SHAPE</text>
+  <text x="292" y="354" class="text" font-size="17" font-weight="600">Team or Graph</text>
+  <rect x="292" y="372" width="166" height="31" rx="5" fill="#17213a" stroke="#314b8b" />
+  <circle cx="307" cy="387" r="7" fill="none" stroke="#a4b9f5" />
+  <circle cx="303" cy="387" r="2" fill="#a4b9f5" />
+  <circle cx="311" cy="387" r="2" fill="#a4b9f5" />
+  <text x="323" y="391" class="body" font-size="11">TEAM</text>
+  <text x="447" y="391" text-anchor="end" class="muted" font-size="10">会話・委譲</text>
+  <rect x="292" y="411" width="166" height="31" rx="5" fill="#21192c" stroke="#4b3764" />
+  <path d="M299 426 H307 L315 420 M307 426 L315 432" fill="none" stroke="#d0b6ee" stroke-width="1.1" />
+  <text x="323" y="430" class="body" font-size="11">GRAPH</text>
+  <text x="447" y="430" text-anchor="end" class="muted" font-size="10">手順・分岐</text>
+  <text x="292" y="462" class="faint" font-size="10">仕事に合う進め方を選ぶ。</text>
+
+  <!-- 03 Agents -->
+  <rect x="512" y="292" width="206" height="188" rx="10" class="card" stroke="#377d5e" />
+  <line x1="513" y1="293" x2="717" y2="293" stroke="#3dd68c" stroke-width="2" />
+  <text x="530" y="317" class="mono green" font-size="9">03 / WORK</text>
+  <circle cx="547" cy="348" r="12" fill="#10251e" stroke="#3dd68c" />
+  <path d="M541 348 C541 343, 553 343, 553 348 M543 353 C543 349, 551 349, 551 353" fill="none" stroke="#a8efca" stroke-width="1.1" />
+  <text x="568" y="354" class="text" font-size="17" font-weight="600">AI agents</text>
+  <text x="530" y="382" class="body" font-size="13">考える。作業する。共有する。</text>
+  <rect x="525" y="404" width="44" height="30" rx="5" fill="#17213a" stroke="#6d96ff" />
+  <text x="547" y="423" text-anchor="middle" class="blue" font-size="9">LEAD</text>
+  <path d="M575 419 H585" class="line" marker-end="url(#arrow)" />
+  <rect x="593" y="404" width="44" height="30" rx="5" fill="#12221d" stroke="#3dd68c" />
+  <text x="615" y="423" text-anchor="middle" class="green" font-size="9">BUILD</text>
+  <path d="M643 419 H653" class="line" marker-end="url(#arrow)" />
+  <rect x="661" y="404" width="44" height="30" rx="5" fill="#21192c" stroke="#b48ee0" />
+  <text x="683" y="423" text-anchor="middle" class="purple" font-size="9">CHECK</text>
+  <text x="615" y="462" text-anchor="middle" class="faint" font-size="10">役割を持って分担する。</text>
+
+  <!-- 04 Observe and steer -->
+  <rect x="756" y="292" width="204" height="188" rx="10" class="card" stroke="#765c9a" />
+  <line x1="757" y1="293" x2="959" y2="293" stroke="#b48ee0" stroke-width="2" />
+  <text x="774" y="317" class="mono purple" font-size="9">04 / CONTROL</text>
+  <circle cx="791" cy="348" r="12" fill="#21192c" stroke="#b48ee0" />
+  <path d="M785 348 A6 6 0 1 1 793 355 M793 355 V350 M793 355 L798 352" fill="none" stroke="#d0b6ee" stroke-width="1.1" />
+  <text x="812" y="354" class="text" font-size="17" font-weight="600">Observe &amp; steer</text>
+  <rect x="774" y="376" width="168" height="25" rx="5" fill="#171a25" stroke="#343b54" />
+  <text x="786" y="392" class="body" font-size="10">TEAM ROOM</text>
+  <text x="930" y="392" text-anchor="end" class="mono green" font-size="8">LIVE</text>
+  <rect x="774" y="409" width="168" height="25" rx="5" fill="#171a25" stroke="#4b3d52" />
+  <text x="786" y="425" class="body" font-size="10">APPROVALS</text>
+  <text x="930" y="425" text-anchor="end" class="mono amber" font-size="8">WAIT</text>
+  <text x="774" y="462" class="faint" font-size="10">人は途中で確認し、止め、導ける。</text>
+
+  <!-- 05 Artifacts -->
+  <rect x="1000" y="292" width="160" height="188" rx="10" class="card" stroke="#a88439" />
+  <line x1="1001" y1="293" x2="1159" y2="293" stroke="#efd28f" stroke-width="2" />
+  <text x="1018" y="317" class="mono amber" font-size="9">05 / OUTPUT</text>
+  <text x="1018" y="354" class="text" font-size="17" font-weight="600">成果物</text>
+  <text x="1018" y="382" class="body" font-size="13">仕事を残す。</text>
+  <rect x="1018" y="403" width="124" height="38" rx="5" fill="#2b2517" stroke="#594c2c" />
+  <path d="M1031 412 H1042 L1047 417 V433 H1031 Z M1042 412 V418 H1048" fill="none" stroke="#efd28f" stroke-width="1" />
+  <text x="1056" y="427" class="body" font-size="9">report.md</text>
+  <text x="1018" y="462" class="mono amber" font-size="8">DOWNLOAD / AUDIT</text>
+
+  <!-- Footer principles -->
+  <line x1="40" y1="527" x2="1160" y2="527" stroke="#292d39" />
+  <text x="40" y="554" class="mono blue" font-size="9">FILE-BASED</text>
+  <text x="40" y="574" class="muted" font-size="11">定義をレビューできる。</text>
+  <text x="330" y="554" class="mono green" font-size="9">LOCAL-FIRST</text>
+  <text x="330" y="574" class="muted" font-size="11">ローカルで実行し、状態を残す。</text>
+  <text x="650" y="554" class="mono amber" font-size="9">HUMAN CONTROL</text>
+  <text x="650" y="574" class="muted" font-size="11">承認と介入を人が決める。</text>
+  <text x="1160" y="574" text-anchor="end" class="mono" font-size="10">Design the team. Watch the work.</text>
+</svg>

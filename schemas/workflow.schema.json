@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WorkAgents workflow.yaml (deprecated)",
+  "description": "旧形式。graph.yaml への移行が前提で、未移行の workflow.yaml は実行を拒否される (migrate-workflows で変換する)。",
+  "type": "object",
+  "additionalProperties": false,
+  "x-ui": { "deprecated": true, "deprecationNote": "graph.yaml へ移行してください。GUI での新規作成はできません。" },
+  "properties": {
+    "kind": { "type": "string", "description": "旧ワークフローの種別。通常は Workflow。" },
+    "name": { "type": "string", "description": "ワークフロー名。省略時はフォルダー名を使う。" },
+    "displayName": { "type": "string", "description": "画面に表示するワークフロー名。省略時は name を使う。" },
+    "description": { "type": "string", "description": "ワークフローの目的や処理内容の説明。" },
+    "schedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "定期実行の設定。手動実行も可能。",
+      "properties": {
+        "cron": { "type": "string", "description": "スケジュールを表す cron 式。" }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "description": "順番に実行する旧形式のステップ一覧。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "kind": { "type": "string", "enum": ["agent", "code", "approve"], "description": "省略時 agent。" },
+          "name": { "type": "string", "description": "ステップ名。省略時は step-<番号> を使う。" },
+          "agent": { "type": "string", "description": "kind: agent で呼び出すエージェント名。", "x-source": "agents" },
+          "input": { "type": "string", "description": "kind: agent の入力テンプレート。${workflow.input} や ${steps.<name>.output} を参照できる。" },
+          "code": { "type": "string", "description": "kind: code の C# スクリプト本文。" },
+          "codeFile": { "type": "string", "description": "kind: code で code の代わりに外部ファイルを参照する。" },
+          "title": { "type": "string", "description": "kind: approve の承認要求タイトル。" },
+          "summary": { "type": "string", "description": "kind: approve の承認要求要約。" },
+          "timeoutMinutes": { "type": "number", "minimum": 0, "description": "kind: approve のタイムアウト (分)。0 または省略時は既定値 (15 分)。" }
+        }
+      }
+    }
+  }
+}

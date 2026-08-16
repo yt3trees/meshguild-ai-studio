@@ -1,0 +1,229 @@
+.tools-page {
+    min-height: calc(100vh - 50px);
+    overflow-y: auto;
+}
+
+.tools-inner {
+    max-width: 1060px;
+    margin: 0 auto;
+    padding: 36px 28px 48px;
+}
+
+.tools-heading {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 26px;
+}
+
+.tools-heading h1 {
+    margin: 0 0 6px;
+    color: #ededf2;
+    font-size: 1.35rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+}
+
+.tools-heading p {
+    margin: 0;
+    color: #6b6b78;
+    font-size: 0.875rem;
+}
+
+.milestone-badge {
+    display: flex;
+    align-items: center;
+    padding: 5px 11px;
+    color: #8fa9ec;
+    background: rgba(94, 139, 255, 0.08);
+    border: 1px solid rgba(94, 139, 255, 0.25);
+    border-radius: 14px;
+    font-size: 0.875rem;
+    font-family: "Geist Mono", monospace;
+    white-space: nowrap;
+}
+
+.panel {
+    background: #0e0e12;
+    border: 1px solid #1e1e25;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.registry-panel {
+    margin-bottom: 12px;
+}
+
+.registry-header,
+.registry-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) auto auto;
+    gap: 14px;
+    align-items: center;
+}
+
+.registry-header {
+    padding: 10px 18px;
+    border-bottom: 1px solid #1a1a21;
+    color: #565662;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+}
+
+.registry-row {
+    padding: 14px 18px;
+    border-bottom: 1px solid #16161c;
+}
+
+.registry-row-last {
+    border-bottom: 0;
+}
+
+.registry-name-block {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+}
+
+.registry-name {
+    color: #e4e4ec;
+    font-size: 0.875rem;
+    font-weight: 500;
+    font-family: "Geist Mono", monospace;
+}
+
+.registry-desc {
+    color: #565662;
+    font-size: 0.875rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.registry-source {
+    color: #7c7c89;
+    font-size: 0.875rem;
+    font-family: "Geist Mono", monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.badge {
+    padding: 3px 9px;
+    border-radius: 10px;
+    font-size: 0.875rem;
+    white-space: nowrap;
+    font-family: "Geist Mono", monospace;
+}
+
+.badge-policy,
+.badge-none {
+    color: #7c7c89;
+    background: #131318;
+    border: 1px solid #24242d;
+}
+
+.badge-required {
+    color: #dcbd75;
+    background: rgba(220, 189, 117, 0.08);
+    border: 1px solid rgba(220, 189, 117, 0.25);
+}
+
+.registry-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #9b9ba7;
+    font-size: 0.875rem;
+}
+
+.status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+}
+
+.status-dot-on { background: #3dd68c; }
+.status-dot-off { background: #565662; }
+
+.registry-footnote {
+    padding: 12px 18px;
+    background: #0d0d10;
+    color: #565662;
+    font-size: 0.875rem;
+}
+
+.registry-empty {
+    padding: 24px 18px;
+    color: #6b6b78;
+    font-size: 0.875rem;
+    text-align: center;
+}
+
+.panel-header {
+    padding: 13px 18px;
+    border-bottom: 1px solid #1a1a21;
+    color: #ededf2;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.panel-header-sub {
+    margin-left: 10px;
+    color: #565662;
+    font-size: 0.875rem;
+    font-family: "Geist Mono", monospace;
+    font-weight: 400;
+}
+
+.policy-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.policy-col {
+    padding: 14px 18px;
+    border-right: 1px solid #16161c;
+}
+
+.policy-col-last {
+    border-right: 0;
+}
+
+.policy-col-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin-bottom: 8px;
+}
+
+.policy-col-label-ok { color: #6b6b78; }
+.policy-col-label-warn { color: #dcbd75; }
+.policy-col-label-danger { color: #e08c8c; }
+
+.policy-col-body {
+    color: #9b9ba7;
+    font-size: 0.875rem;
+    font-family: "Geist Mono", monospace;
+    line-height: 1.9;
+}
+
+@media (max-width: 820px) {
+    .policy-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .policy-col {
+        border-right: 0;
+        border-bottom: 1px solid #16161c;
+    }
+
+    .policy-col-last {
+        border-bottom: 0;
+    }
+}

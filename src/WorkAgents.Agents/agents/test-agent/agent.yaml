@@ -1,0 +1,7 @@
+kind: Prompt
+name: test-agent
+displayName: Test Agent
+description: Designs and runs deterministic verification for delegated work.
+harness:
+  shell: false
+  fileStore: artifacts

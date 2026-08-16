@@ -1,0 +1,273 @@
+@using WorkAgents.Core.Authoring
+
+@*
+    スキーマ (schemas/*.json) の 1 項目をフォーム部品として描画する。
+    ラベル、説明、選択肢、必須、既定値の表示はすべて UiField 由来で、
+    ここに項目ごとの分岐を書き足す必要はない (案A/B)。
+*@
+
+<div class="wa-field @(Field.Advanced ? "wa-field-advanced" : null)">
+    <label for="@elementId">
+        <span>@Field.Name</span>
+        @if (Field.Required)
+        {
+            <span class="wa-field-required" title="必須">必須</span>
+        }
+        @if (!string.IsNullOrWhiteSpace(Field.Unit))
+        {
+            <span class="wa-field-unit">@Field.Unit</span>
+        }
+        @if (!string.IsNullOrWhiteSpace(Field.Description))
+        {
+            <button type="button" class="wa-field-info @(showHelp ? "active" : null)" @onclick="ToggleHelp" @onclick:stopPropagation="true"
+                    title="説明を表示" aria-label="説明を表示" aria-expanded="@showHelp">i</button>
+        }
+    </label>
+
+    @if (showHelp && !string.IsNullOrWhiteSpace(Field.Description))
+    {
+        <div class="wa-field-popover-backdrop" @onclick="CloseHelp"></div>
+        <div class="wa-field-popover" @onclick:stopPropagation="true">
+            <div class="wa-field-popover-head">
+                <span>@Field.Name</span>
+                <button type="button" class="wa-field-popover-close" @onclick="CloseHelp" aria-label="閉じる">×</button>
+            </div>
+            <p>@Field.Description</p>
+        </div>
+    }
+
+    <div class="@(TrailingAction is null ? null : "wa-field-row")">
+    @switch (ControlKind)
+    {
+        case "select":
+            <select id="@elementId" class="wa-input" value="@Value" disabled="@Disabled"
+                    @onchange="OnTextChanged" data-pw="schema-field-@Field.Path">
+                <option value="">@EmptyOptionLabel</option>
+                @foreach (var option in choices)
+                {
+                    <option value="@option.Value" selected="@(string.Equals(option.Value, Value, StringComparison.Ordinal))">
+                        @option.DisplayLabel@(string.IsNullOrWhiteSpace(option.Detail) ? null : $" — {option.Detail}")
+                    </option>
+                }
+                @if (IsDanglingReference)
+                {
+                    <option value="@Value" selected>@Value (この名前の定義は見つかりません)</option>
+                }
+            </select>
+            break;
+
+        case "multiselect":
+            <div class="wa-checkbox-row" data-pw="schema-field-@Field.Path">
+                @foreach (var option in choices)
+                {
+                    var captured = option;
+                    <label class="wa-checkbox" title="@captured.Detail">
+                        <input type="checkbox" disabled="@Disabled"
+                               checked="@IsSelected(captured.Value)"
+                               @onchange="args => ToggleValue(captured.Value, args)" />
+                        <span>@captured.DisplayLabel</span>
+                    </label>
+                }
+                @foreach (var dangling in DanglingValues)
+                {
+                    var captured = dangling;
+                    <label class="wa-checkbox wa-checkbox-warn">
+                        <input type="checkbox" disabled="@Disabled" checked
+                               @onchange="args => ToggleValue(captured, args)" />
+                        <span>@captured (見つかりません)</span>
+                    </label>
+                }
+            </div>
+            break;
+
+        case "textarea":
+            <textarea id="@elementId" class="wa-input" rows="4" disabled="@Disabled"
+                      placeholder="@Placeholder" value="@Value"
+                      @onchange="OnTextChanged" data-pw="schema-field-@Field.Path"></textarea>
+            break;
+
+        case "number":
+            <input id="@elementId" class="wa-input" type="number" disabled="@Disabled"
+                   step="@StepAttribute" min="@Field.Minimum" max="@Field.Maximum"
+                   placeholder="@Placeholder" value="@Value"
+                   @onchange="OnTextChanged" data-pw="schema-field-@Field.Path" />
+            break;
+
+        case "switch":
+            <label class="wa-switch">
+                <input id="@elementId" type="checkbox" disabled="@Disabled"
+                       checked="@IsChecked" @onchange="OnCheckChanged" data-pw="schema-field-@Field.Path" />
+                <span>@(IsChecked ? "有効" : "無効")</span>
+            </label>
+            break;
+
+        default:
+            <input id="@elementId" class="wa-input" type="text" disabled="@Disabled"
+                   placeholder="@Placeholder" value="@Value"
+                   @onchange="OnTextChanged" data-pw="schema-field-@Field.Path" />
+            break;
+    }
+    @TrailingAction
+    </div>
+
+    @if (DanglingValues.Count > 0)
+    {
+        <p class="wa-field-warn">@string.Join(", ", DanglingValues) という@(SourceLabel)は見つかりません。名前が変わったか、まだ作られていません。</p>
+    }
+    else if (IsDanglingReference)
+    {
+        <p class="wa-field-warn">@Value という定義は見つかりません。名前が変わったか、まだ作られていません。</p>
+    }
+    else if (NoOptionsAvailable)
+    {
+        <p class="wa-field-warn">選べる@(SourceLabel)がまだありません。@NoOptionsHint</p>
+    }
+
+    @if (Field.SupportsReferences)
+    {
+        <p class="wa-field-hint">$&#123;mission.goal&#125; や $&#123;nodes.&lt;ノード ID&gt;.output&#125; で他の値を差し込めます。</p>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public UiField Field { get; set; } = default!;
+
+    [Parameter] public string? Value { get; set; }
+
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    /// <summary>widget が multiselect のときの現在値。配列項目はこちらを使う。</summary>
+    [Parameter] public IReadOnlyList<string> Values { get; set; } = Array.Empty<string>();
+
+    [Parameter] public EventCallback<IReadOnlyList<string>> ValuesChanged { get; set; }
+
+    /// <summary>入力欄の右側に置く任意のボタンなど (フォルダを開く、など)。指定時は入力欄と横並びになる。</summary>
+    [Parameter] public RenderFragment? TrailingAction { get; set; }
+
+    /// <summary>x-source を解決するための選択肢。null なら参照項目も自由入力になる。</summary>
+    [Parameter] public ReferenceOptions? Options { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    private readonly string elementId = $"field-{Guid.NewGuid():n}";
+    private IReadOnlyList<ReferenceOption> choices = Array.Empty<ReferenceOption>();
+    private bool showHelp;
+
+    protected override void OnParametersSet()
+    {
+        choices = BuildChoices();
+    }
+
+    private void ToggleHelp() => showHelp = !showHelp;
+
+    private void CloseHelp() => showHelp = false;
+
+    /// <summary>
+    /// 選択肢の取得元。配列項目は x-source が要素側 (items) に付くため、そちらも見る。
+    /// </summary>
+    private string? EffectiveSource
+        => string.IsNullOrEmpty(Field.Source) ? Field.Item?.Source : Field.Source;
+
+    private IReadOnlyList<ReferenceOption> BuildChoices()
+    {
+        if (!string.IsNullOrEmpty(EffectiveSource))
+        {
+            return Options?.For(EffectiveSource) ?? Array.Empty<ReferenceOption>();
+        }
+        var enumValues = Field.EnumValues.Count > 0 ? Field : Field.Item;
+        return enumValues is null
+            ? Array.Empty<ReferenceOption>()
+            : enumValues.EnumValues.Select(value => new ReferenceOption(value, enumValues.LabelFor(value))).ToArray();
+    }
+
+    /// <summary>
+    /// 選択肢が 1 つも無い参照項目は、選ばせようがないので自由入力に落とす。
+    /// ただし multiselect は配列なので自由入力にはできず、チェックボックスのまま空で出す。
+    /// </summary>
+    private string ControlKind => Field.Widget switch
+    {
+        "multiselect" => "multiselect",
+        "select" when choices.Count == 0 && !IsDanglingReference => "text",
+        "select" => "select",
+        "textarea" => "textarea",
+        "number" => "number",
+        "switch" => "switch",
+        _ => "text",
+    };
+
+    private bool NoOptionsAvailable
+        => !string.IsNullOrEmpty(EffectiveSource) && choices.Count == 0;
+
+    private bool IsSelected(string value)
+        => Values.Contains(value, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>選ばれているのに選択肢に無い値。名前変更や削除に気づかせるため、消さずに出す。</summary>
+    private IReadOnlyList<string> DanglingValues
+        => ControlKind != "multiselect"
+            ? Array.Empty<string>()
+            : Values
+                .Where(value => !choices.Any(option => string.Equals(option.Value, value, StringComparison.OrdinalIgnoreCase)))
+                .ToArray();
+
+    private Task ToggleValue(string value, ChangeEventArgs args)
+    {
+        var enabled = args.Value is bool boolean && boolean;
+        var next = Values.Where(item => !string.Equals(item, value, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (enabled)
+        {
+            next.Add(value);
+        }
+        return ValuesChanged.InvokeAsync(next);
+    }
+
+    /// <summary>値が入っているのに選択肢に無い場合。名前変更や未作成を GUI 上で気づかせる。</summary>
+    private bool IsDanglingReference
+        => !string.IsNullOrWhiteSpace(Value)
+           && !string.IsNullOrEmpty(EffectiveSource)
+           && choices.Count > 0
+           && !choices.Any(option => string.Equals(option.Value, Value, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>選択肢が無いときに、具体的にどこで作れるかを添える。source ごとに導線が違うため個別に持つ。</summary>
+    private string NoOptionsHint => EffectiveSource switch
+    {
+        "subgraphs" => "右上の「グラフ」タブ→「+ サブグラフを追加」で作れます。",
+        _ => $"先に{SourceLabel}を作ってください。",
+    };
+
+    private string SourceLabel => EffectiveSource switch
+    {
+        "agents" => "エージェント",
+        "teams" => "チーム",
+        "graphs" => "グラフ",
+        "skills" => "skill",
+        "nodes" or "code-nodes" => "ノード",
+        "subgraphs" => "サブグラフ",
+        "team-agents" => "チーム内のエージェント",
+        _ => "選択肢",
+    };
+
+    private string EmptyOptionLabel => string.IsNullOrWhiteSpace(Field.DefaultHint)
+        ? "(未設定)"
+        : $"(未設定 — 既定: {Field.DefaultHint})";
+
+    private string? Placeholder => Field.Placeholder
+        ?? (string.IsNullOrWhiteSpace(Field.DefaultHint) ? null : $"既定: {Field.DefaultHint}");
+
+    private string StepAttribute => Field.Step?.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        ?? (Field.Type == UiFieldType.Integer ? "1" : "any");
+
+    private bool IsChecked => string.Equals(Value, "true", StringComparison.OrdinalIgnoreCase);
+
+    private Task OnTextChanged(ChangeEventArgs args)
+    {
+        var text = args.Value?.ToString();
+        return ValueChanged.InvokeAsync(string.IsNullOrWhiteSpace(text) ? null : text);
+    }
+
+    private Task OnCheckChanged(ChangeEventArgs args)
+    {
+        var value = args.Value is bool boolean && boolean;
+        return ValueChanged.InvokeAsync(value ? "true" : null);
+    }
+}
+

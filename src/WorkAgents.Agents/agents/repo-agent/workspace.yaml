@@ -1,0 +1,20 @@
+# workspace.yaml — repo-agent の作業FS/shell ポリシー(M2)。
+# FileStore 親ルート・shell denylist/confine を定義。HarnessAgentFactory が読む。
+# 未指定項目は ProfileOptions(WorkspaceRoot 等)と既定 denylist で補完される。
+
+fileStore:
+  kind: workspace
+  # root 未指定時は ProfileOptions.WorkspaceRoot。run/呼び出しごとにサブディレクトリを切る。
+
+shell:
+  confineWorkingDirectory: true
+  # POSIX 系の既定 denylist は HarnessAgentFactory 既定(blend)に加え追加分。
+  denyList:
+    - \bgit\s+push\b
+    - \brm\s+-rf?\b
+    - \bsudo\b
+    - \bcurl\b
+    - \bwget\b
+  allowList: []
+  timeoutSeconds: 600
+  maxOutputBytes: 131072

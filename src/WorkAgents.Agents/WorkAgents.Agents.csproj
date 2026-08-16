@@ -1,0 +1,51 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\WorkAgents.Core\WorkAgents.Core.csproj" />
+    <ProjectReference Include="..\WorkAgents.Harness\WorkAgents.Harness.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AWS.Bedrock.MEAI" Version="1.0.0" />
+    <PackageReference Include="Anthropic" Version="12.40.0" />
+    <PackageReference Include="Azure.AI.OpenAI" Version="2.9.0-beta.1" />
+    <PackageReference Include="Azure.Identity" Version="1.21.0" />
+    <PackageReference Include="Microsoft.Agents.AI.Foundry" Version="1.13.0-preview.260703.1" />
+    <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.13.0" />
+    <PackageReference Include="OpenAI" Version="2.10.0" />
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
+  </ItemGroup>
+
+<!-- agent.yaml / instructions.md / SKILL.md / workflow.yaml / *.cs スクリプトを出力へコピー(M1/M3.5: WebUI が実行時に読む) -->
+  <ItemGroup>
+    <Content Include="agents\**\*.*" Exclude="agents\**\*.cs" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="skills\**\*.*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="workflows\**\*.*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="teams\**\*.*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="graphs\**\*.*" Exclude="graphs\**\*.cs" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- workflows / graphs 配下の .cs / .csx は Roslyn スクリプトとして実行時に評価するため、
+       プロジェクトの通常 Compile から外す(既定 glob の抑制)。 -->
+  <ItemGroup>
+    <Compile Remove="workflows\**\*.cs" />
+    <Compile Remove="workflows\**\*.csx" />
+    <Compile Remove="graphs\**\*.cs" />
+    <Compile Remove="graphs\**\*.csx" />
+    <None Include="workflows\**\*.cs" />
+    <None Include="workflows\**\*.csx" />
+    <None Include="graphs\**\*.cs" />
+    <None Include="graphs\**\*.csx" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- OpenAI ResponsesClient は experimental(API 評価目的)。
+         MAF の Responses プロバイダ経路で利用するため OPENAI001 を抑制。
+         Responses API が GA したら再検討(ADR 参照)。 -->
+    <NoWarn>$(NoWarn);OPENAI001;MAAI001;MEAI001</NoWarn>
+  </PropertyGroup>
+
+</Project>

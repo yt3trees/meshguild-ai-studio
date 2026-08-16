@@ -1,0 +1,275 @@
+@page "/missions"
+@page "/"
+@implements IAsyncDisposable
+@using WorkAgents.Core
+@using WorkAgents.Core.Abstractions
+@using WorkAgents.Core.Loops
+@using WorkAgents.Core.Missions
+@inject IMissionStore MissionStore
+@inject IAgentInstanceStore AgentInstanceStore
+@inject IMissionQueueStore MissionQueueStore
+@inject IApprovalStore ApprovalStore
+@inject ILoopStore LoopStore
+
+<PageTitle>MeshGuild AI Studio | Mission Control</PageTitle>
+
+<div class="wa-scroll-page mission-control-page">
+    <div class="wa-inner">
+        <div class="wa-head">
+            <div>
+                <h1>Mission Control</h1>
+                <p>チームに渡した目標の進行状況</p>
+            </div>
+            <span class="wa-head-time">@DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm zzz")</span>
+        </div>
+
+        @if (loadError is not null)
+        {
+            <div class="wa-load-error" role="alert">@loadError</div>
+        }
+
+        <div class="wa-stat-grid">
+            <div class="wa-stat-card">
+                <div class="wa-stat-label">Active missions</div>
+                <div class="wa-stat-value">@runningMissions.Count</div>
+                <div class="wa-stat-note">@runningMissions.Select(m => m.TeamName ?? m.TargetName).Distinct().Count() teams</div>
+            </div>
+            <div class="wa-stat-card">
+                <div class="wa-stat-label">Agents busy</div>
+                <div class="wa-stat-value">@activeAgentCount / 12</div>
+                <div class="wa-stat-note wa-stat-note-ok">@AgentStatusSummary</div>
+            </div>
+            <a class="wa-stat-card wa-stat-card-hl" href="approvals">
+                <div class="wa-stat-label wa-stat-label-accent">Pending approvals</div>
+                <div class="wa-stat-value">@pendingApprovalCount</div>
+                <div class="wa-stat-note wa-stat-note-warn">@ApprovalSummary →</div>
+            </a>
+            <div class="wa-stat-card">
+                <div class="wa-stat-label">Budget used today</div>
+                <div class="wa-stat-value">$@totalCostUsed.ToString("0.00")</div>
+                <div class="wa-stat-note">of $20.00 cap</div>
+            </div>
+        </div>
+
+        <div class="wa-two-col wa-mb">
+        <section class="wa-panel">
+            <div class="wa-panel-header">
+                <span>Running missions</span>
+                <span class="wa-panel-sub">live</span>
+            </div>
+            @if (runningMissions.Count == 0)
+            {
+                <div class="wa-empty">実行中のミッションはありません。</div>
+            }
+            else
+            {
+                <div class="wa-table-wrap">
+                    <table class="wa-table" data-pw="running-missions">
+                        <thead>
+                            <tr><th>Mission</th><th>Team</th><th>Phase</th><th>Loop</th><th>Budget</th><th></th></tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var mission in runningMissions)
+                        {
+                            var budget = budgets.GetValueOrDefault(mission.MissionId);
+                            <tr>
+                                <td><div class="wa-primary-text">@mission.Goal</div><div class="wa-cell-dim">@mission.MissionId · @mission.CreatedAt.ToLocalTime().ToString("HH:mm")</div></td>
+                                <td><span class="wa-tag wa-tag-accent">@(mission.TeamName ?? mission.TargetName)</span></td>
+                                <td><span class="wa-tag @StatusClass(mission.Status)">@StatusLabel(mission.Status)</span></td>
+                                <td class="wa-cell-dim">@LoopLabel(mission.MissionId)</td>
+                                <td class="wa-cell-dim">$@(budget?.CostUsedUsd.ToString("0.00") ?? "0.00")</td>
+                                <td><a class="wa-btn wa-btn-sm" href="missions/@mission.MissionId">開く</a></td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+
+        <section class="wa-panel wa-panel-activity">
+            <div class="wa-panel-header"><span>Agent activity</span></div>
+            @if (activeAgents.Count == 0)
+            {
+                <div class="wa-empty">稼働中のエージェントはいません。</div>
+            }
+            else
+            {
+                @foreach (var agent in activeAgents)
+                {
+                    <div class="wa-member">
+                        <span class="wa-avatar @AgentClass(agent)">@AgentInitials(agent)</span>
+                        <div>
+                            <div class="wa-member-name">@agent.AgentName</div>
+                            <div class="wa-member-role">@(agent.Role == AgentInstanceRole.Orchestrator ? "統括" : "サブエージェント") · @agent.ModelName</div>
+                            <div class="wa-member-state"><span class="wa-pulse @StateClass(agent.State)"></span>@StateLabel(agent)</div>
+                        </div>
+                    </div>
+                }
+            }
+        </section>
+        </div>
+
+        <section class="wa-panel">
+            <div class="wa-panel-header"><span>Guardrails</span><span class="wa-panel-sub">全ミッション共通の停止条件</span></div>
+            <div class="wa-panel-body">
+                <div class="wa-cond-grid">
+                    <div class="wa-cond"><div class="wa-cond-name">最大反復</div><div class="wa-cond-value">10 周</div><div class="wa-cond-note">現在の最大消費 @MaxIterationsUsed 周</div></div>
+                    <div class="wa-cond"><div class="wa-cond-name">委譲の深さ</div><div class="wa-cond-value">3 段</div><div class="wa-cond-note">超過時は委譲を拒否</div></div>
+                    <div class="wa-cond"><div class="wa-cond-name">無進捗の往復</div><div class="wa-cond-value">5 回</div><div class="wa-cond-note">超過で統括へ差し戻し</div></div>
+                    <div class="wa-cond"><div class="wa-cond-name">承認期限</div><div class="wa-cond-value">15 分</div><div class="wa-cond-note">期限切れは却下扱い</div></div>
+                </div>
+            </div>
+        </section>
+    </div>
+</div>
+
+@code {
+    private readonly CancellationTokenSource refreshCancellation = new();
+    private IReadOnlyList<Mission> runningMissions = Array.Empty<Mission>();
+    private IReadOnlyList<Mission> completedMissions = Array.Empty<Mission>();
+    private IReadOnlyList<AgentInstance> activeAgents = Array.Empty<AgentInstance>();
+    private IReadOnlyList<MissionQueueEntry> waitQueue = Array.Empty<MissionQueueEntry>();
+    private IReadOnlyList<ApprovalRequest> pendingApprovals = Array.Empty<ApprovalRequest>();
+    private readonly Dictionary<string, Budget?> budgets = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (int Current, int Max)> loopSummaries = new(StringComparer.Ordinal);
+    private string? loadError;
+
+    private int activeAgentCount => activeAgents.Count;
+    private int pendingApprovalCount => pendingApprovals.Count;
+    private double totalCostUsed => budgets.Values.Where(b => b is not null).Sum(b => b!.CostUsedUsd);
+    private int MaxIterationsUsed => budgets.Values.Where(b => b is not null).Select(b => b!.IterationsUsed).DefaultIfEmpty().Max();
+    private string AgentStatusSummary => activeAgents.Count == 0 ? "no active agents" : "no deadlock detected";
+    private string ApprovalSummary => pendingApprovalCount == 0 ? "none pending" : $"{pendingApprovalCount} waiting";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync(refreshCancellation.Token);
+        _ = RefreshLoopAsync(refreshCancellation.Token);
+    }
+
+    private async Task RefreshLoopAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                await LoadAsync(cancellationToken);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    private async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var missions = await MissionStore.ListAsync(
+                new MissionQuery { Statuses = new[] { MissionStatus.Running, MissionStatus.Paused, MissionStatus.AwaitingApproval } },
+                cancellationToken);
+            runningMissions = missions;
+            completedMissions = await MissionStore.ListAsync(
+                new MissionQuery
+                {
+                    Statuses = new[] { MissionStatus.Succeeded, MissionStatus.NotConverged, MissionStatus.Failed, MissionStatus.Aborted },
+                    Limit = 100,
+                },
+                cancellationToken);
+
+            pendingApprovals = await ApprovalStore.ListPendingAsync(ct: cancellationToken);
+            budgets.Clear();
+            loopSummaries.Clear();
+            foreach (var mission in missions)
+            {
+                budgets[mission.MissionId] = await MissionStore.GetBudgetAsync(mission.MissionId, cancellationToken);
+                var loopRuns = await LoopStore.ListLoopRunsAsync(mission.MissionId, cancellationToken);
+                var current = 0;
+                var maximum = 0;
+                foreach (var loop in loopRuns)
+                {
+                    maximum = Math.Max(maximum, loop.MaxIterations);
+                    current = Math.Max(current, (await LoopStore.ListIterationsAsync(loop.LoopRunId, ct: cancellationToken)).Select(iteration => iteration.IterationNo).DefaultIfEmpty(0).Max());
+                }
+                if (maximum > 0) loopSummaries[mission.MissionId] = (current, maximum);
+            }
+
+            var agents = new List<AgentInstance>();
+            foreach (var mission in missions)
+            {
+                var instances = await AgentInstanceStore.ListByMissionAsync(mission.MissionId, cancellationToken);
+                agents.AddRange(instances.Where(i => i.State is not (AgentInstanceState.Completed or AgentInstanceState.Failed or AgentInstanceState.Stopped)));
+            }
+            activeAgents = agents;
+
+            waitQueue = await MissionQueueStore.ListAsync(cancellationToken);
+            loadError = null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            loadError = "ミッションの状況を読み込めませんでした。";
+        }
+    }
+
+    private string LoopLabel(string missionId) => loopSummaries.TryGetValue(missionId, out var loop) ? $"{loop.Current} / {loop.Max}" : "—";
+
+    private static string StatusClass(MissionStatus status) => status switch
+    {
+        MissionStatus.AwaitingApproval => "wa-tag-bad",
+        MissionStatus.Paused => "wa-tag-accent",
+        MissionStatus.Running => "wa-tag-warn",
+        _ => "wa-tag-ok",
+    };
+
+    private static string StatusLabel(MissionStatus status) => status switch
+    {
+        MissionStatus.AwaitingApproval => "承認待ち",
+        MissionStatus.Paused => "一時停止",
+        MissionStatus.Running => "実行中",
+        _ => status.ToString(),
+    };
+
+    private static string AgentInitials(AgentInstance agent)
+    {
+        var words = agent.AgentName.Split(['-', '_', ' ', '/'], StringSplitOptions.RemoveEmptyEntries);
+        return string.Concat(words.Take(2).Select(word => char.ToUpperInvariant(word[0])));
+    }
+
+    private static string AgentClass(AgentInstance agent) => agent.Role == AgentInstanceRole.Orchestrator
+        ? "wa-agent-orch"
+        : agent.AgentName.Contains("spec", StringComparison.OrdinalIgnoreCase) ? "wa-agent-spec"
+        : agent.AgentName.Contains("test", StringComparison.OrdinalIgnoreCase) ? "wa-agent-test"
+        : agent.AgentName.Contains("review", StringComparison.OrdinalIgnoreCase) ? "wa-agent-review"
+        : "wa-agent-dev";
+
+    private static string StateClass(AgentInstanceState state) => state switch
+    {
+        AgentInstanceState.AwaitingApproval => "wa-pulse-hold",
+        AgentInstanceState.AwaitingReply => "wa-pulse-wait",
+        AgentInstanceState.Thinking or AgentInstanceState.ToolRunning => "wa-pulse-run",
+        AgentInstanceState.Completed => "wa-pulse-ok",
+        _ => "wa-pulse-idle",
+    };
+
+    private static string StateLabel(AgentInstance agent) => agent.State switch
+    {
+        AgentInstanceState.AwaitingApproval => "承認待ち",
+        AgentInstanceState.AwaitingReply => $"{agent.AwaitingInstanceId ?? "相手"} の完了待ち",
+        AgentInstanceState.Thinking => "判断中",
+        AgentInstanceState.ToolRunning => "ツール実行中",
+        AgentInstanceState.Completed => "完了 · 待機",
+        AgentInstanceState.Failed => "失敗",
+        AgentInstanceState.Stopped => "停止",
+        _ => "待機",
+    };
+
+    public ValueTask DisposeAsync()
+    {
+        refreshCancellation.Cancel();
+        refreshCancellation.Dispose();
+        return ValueTask.CompletedTask;
+    }
+}

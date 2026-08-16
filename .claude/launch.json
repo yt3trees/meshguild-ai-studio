@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "work-agents-web",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "src/WorkAgents.Web", "--no-build", "--urls", "http://localhost:5049"],
+      "port": 5049
+    }
+  ]
+}

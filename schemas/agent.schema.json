@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WorkAgents agent.yaml",
+  "description": "1 エージェントの定義。未知キーはエンジン側では無視されるが、typo 検出のためこのスキーマでは弾く。",
+  "type": "object",
+  "additionalProperties": false,
+  "x-ui": { "groups": ["基本", "権限"] },
+  "properties": {
+    "kind": {
+      "type": "string",
+      "description": "参考用のエージェント種別 (例: Prompt)。MAF 本体の declarative kind とは直結しない。",
+      "x-ui": { "group": "基本", "order": 90, "widget": "text", "placeholder": "Prompt", "advanced": true }
+    },
+    "name": {
+      "type": "string",
+      "description": "エージェント名。フォルダー名 (agents/<name>) と一致させること。",
+      "x-ui": { "group": "基本", "order": 1, "widget": "text", "placeholder": "code-reviewer" }
+    },
+    "displayName": {
+      "type": "string",
+      "description": "画面や一覧に表示するエージェント名。省略時は name またはフォルダー名を使う。",
+      "x-ui": { "group": "基本", "order": 2, "widget": "text", "defaultHint": "name と同じ" }
+    },
+    "description": {
+      "type": "string",
+      "description": "エージェントの目的や担当する処理の説明。",
+      "x-ui": { "group": "基本", "order": 3, "widget": "textarea", "placeholder": "差分をレビューして指摘を返す" }
+    },
+    "skills": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "公開する共有 skill の名前。skills/<name>/SKILL.md に対応する。",
+        "x-source": "skills"
+      },
+      "description": "このエージェントに公開する共有 skill 名。未指定時は共有 skill を公開しない。",
+      "x-ui": { "group": "権限", "order": 10, "widget": "multiselect", "defaultHint": "共有 skill を公開しない" }
+    },
+    "harness": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "エージェントに付与するシェル実行とファイルストアのポリシー。",
+      "x-ui": { "group": "権限", "order": 20 },
+      "properties": {
+        "shell": {
+          "type": "boolean",
+          "description": "シェル実行を許可するか。既定 false。",
+          "x-ui": { "order": 1, "widget": "switch", "defaultHint": "false (シェル実行なし)" }
+        },
+        "fileStore": {
+          "type": "string",
+          "enum": ["workspace", "artifacts"],
+          "description": "ファイル操作の用途。workspace は作業用 FS、artifacts は成果物専用として扱う。省略時はファイルストアを付与しない。",
+          "x-ui": {
+            "order": 2,
+            "widget": "select",
+            "defaultHint": "付与しない",
+            "enumLabels": { "workspace": "workspace (作業用 FS。シェル作業向け)", "artifacts": "artifacts (成果物の置き場のみ)" }
+          }
+        }
+      }
+    }
+  }
+}

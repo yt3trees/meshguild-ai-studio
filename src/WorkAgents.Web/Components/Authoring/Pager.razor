@@ -1,0 +1,21 @@
+@*
+    一覧テーブル共通のページャー。1 ページしかないときは何も表示しない。
+*@
+
+@if (PageCount > 1)
+{
+    <div class="wa-pager" data-pw="pager">
+        <button type="button" class="wa-btn wa-btn-sm" disabled="@(Page <= 0)" @onclick="@(() => PageChanged.InvokeAsync(Page - 1))" data-pw="pager-prev">← 前へ</button>
+        <span class="wa-pager-status" data-pw="pager-status">@(Page + 1) / @PageCount ページ</span>
+        <button type="button" class="wa-btn wa-btn-sm" disabled="@(Page >= PageCount - 1)" @onclick="@(() => PageChanged.InvokeAsync(Page + 1))" data-pw="pager-next">次へ →</button>
+    </div>
+}
+
+@code {
+    /// <summary>現在のページ (0 始まり)。</summary>
+    [Parameter] public int Page { get; set; }
+
+    [Parameter] public int PageCount { get; set; }
+
+    [Parameter] public EventCallback<int> PageChanged { get; set; }
+}

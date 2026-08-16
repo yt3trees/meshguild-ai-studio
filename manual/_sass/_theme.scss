@@ -1,0 +1,134 @@
+// src/WorkAgents.Web/wwwroot/app.css の --wa-* トークンを移植したテーマ定義
+
+:root {
+  --wa-bg: #0a0a0c;
+  --wa-surface: #0d0d10;
+  --wa-panel: #0e0e12;
+  --wa-panel-2: #111116;
+  --wa-line: #1e1e25;
+  --wa-line-soft: #1a1a21;
+  --wa-line-row: #16161c;
+
+  --wa-fg: #ededf2;
+  --wa-body: #c9c9d4;
+  --wa-dim: #adadb8;
+  --wa-muted: #8a8a97;
+  --wa-faint: #777784;
+
+  --wa-accent: #5e8bff;
+  --wa-accent-soft: #8fa9ec;
+  --wa-ok: #3dd68c;
+  --wa-warn: #d5a946;
+  --wa-warn-soft: #dcbd75;
+  --wa-bad: #e08c8c;
+  --wa-purple: #b48ee0;
+
+  --wa-radius: 9px;
+  --wa-radius-sm: 6px;
+}
+
+$font-body: "Geist", "Segoe UI", sans-serif;
+$font-mono: "Geist Mono", Consolas, monospace;
+
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+  color-scheme: dark;
+  color: var(--wa-body);
+  background: var(--wa-bg);
+  font-family: $font-body;
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  scrollbar-color: #34343f var(--wa-surface);
+  scrollbar-width: thin;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: var(--wa-fg);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+a {
+  color: var(--wa-accent-soft);
+  text-decoration: none;
+}
+
+a:hover {
+  color: #cdd9f7;
+}
+
+code,
+pre,
+kbd {
+  font-family: $font-mono;
+}
+
+pre {
+  padding: 14px 16px;
+  overflow-x: auto;
+  background: var(--wa-panel-2);
+  border: 1px solid var(--wa-line);
+  border-radius: var(--wa-radius-sm);
+}
+
+code {
+  padding: 0.15em 0.4em;
+  background: var(--wa-panel-2);
+  border-radius: 4px;
+  font-size: 0.86em;
+}
+
+pre code {
+  padding: 0;
+  background: transparent;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+th,
+td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--wa-line-row);
+  text-align: left;
+}
+
+th {
+  color: var(--wa-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--wa-line-soft);
+}
+
+blockquote {
+  margin: 0;
+  padding: 8px 16px;
+  color: var(--wa-dim);
+  background: var(--wa-panel);
+  border-left: 3px solid var(--wa-accent);
+  border-radius: 0 var(--wa-radius-sm) var(--wa-radius-sm) 0;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid var(--wa-line-soft);
+}
+
+::selection {
+  background: rgba(94, 139, 255, 0.28);
+}

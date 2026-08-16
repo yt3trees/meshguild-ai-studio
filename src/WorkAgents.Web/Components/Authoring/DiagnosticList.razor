@@ -1,0 +1,64 @@
+@using WorkAgents.Core.Authoring
+
+@*
+    検証結果を「何が起きているか」と「どう直すか」の 2 段で見せる (案D)。
+    エラーコードや英文をそのまま出さない。
+*@
+
+@if (Diagnostics is null)
+{
+    @if (!string.IsNullOrWhiteSpace(IdleMessage))
+    {
+        <div class="wa-validation" data-pw="diagnostics-idle">@IdleMessage</div>
+    }
+}
+else if (Diagnostics.Count == 0)
+{
+    <div class="wa-validation valid" data-pw="diagnostics-valid">@ValidMessage</div>
+}
+else
+{
+    <div class="wa-validation invalid" data-pw="diagnostics">
+        <div class="wa-validation-head">@Diagnostics.Count 件の問題があります</div>
+        <ul class="wa-diagnostic-list">
+            @foreach (var diagnostic in Diagnostics)
+            {
+                <li class="wa-diagnostic" data-pw="diagnostic">
+                    <div class="wa-diagnostic-message">@diagnostic.Message</div>
+                    @if (!string.IsNullOrWhiteSpace(diagnostic.Fix))
+                    {
+                        <div class="wa-diagnostic-fix">@diagnostic.Fix</div>
+                    }
+                    @if (diagnostic.NodeIds.Count > 0 || diagnostic.EdgeIds.Count > 0)
+                    {
+                        <div class="wa-diagnostic-targets">
+                            @foreach (var id in diagnostic.NodeIds)
+                            {
+                                <button type="button" class="wa-tag wa-tag-clickable" @onclick="() => OnSelect(id)">@id</button>
+                            }
+                            @foreach (var id in diagnostic.EdgeIds)
+                            {
+                                <span class="wa-tag">@id</span>
+                            }
+                        </div>
+                    }
+                </li>
+            }
+        </ul>
+    </div>
+}
+
+@code {
+    /// <summary>null は「まだ検証していない」を表す。空リストは「問題なし」。</summary>
+    [Parameter] public IReadOnlyList<AuthoringDiagnostic>? Diagnostics { get; set; }
+
+    [Parameter] public string ValidMessage { get; set; } = "問題は見つかりませんでした。";
+
+    [Parameter] public string? IdleMessage { get; set; }
+
+    /// <summary>ノード ID がクリックされたとき。キャンバス上で該当ノードを選ばせる用。</summary>
+    [Parameter] public EventCallback<string> NodeSelected { get; set; }
+
+    private Task OnSelect(string nodeId)
+        => NodeSelected.HasDelegate ? NodeSelected.InvokeAsync(nodeId) : Task.CompletedTask;
+}

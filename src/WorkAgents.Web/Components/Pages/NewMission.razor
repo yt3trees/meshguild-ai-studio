@@ -1,0 +1,111 @@
+@page "/missions/new"
+@using WorkAgents.Core.Graphs
+@using WorkAgents.Core.Teams
+@using WorkAgents.Web.Services
+@inject IReadOnlyList<TeamDefinition> Teams
+@inject IReadOnlyList<GraphDefinition> Graphs
+@inject MissionApiClient MissionApi
+@inject NavigationManager Navigation
+
+<PageTitle>MeshGuild AI Studio | New mission</PageTitle>
+
+<div class="wa-scroll-page">
+    <div class="wa-inner wa-form-page">
+        <div class="wa-head">
+            <div>
+                <h1>New mission</h1>
+                <p>チームまたはグラフへ目標を渡して実行を開始します</p>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(error))
+        {
+            <div class="wa-load-error" role="alert">@error</div>
+        }
+
+        <section class="wa-panel wa-form-panel">
+            <div class="wa-panel-header"><span>Mission definition</span><span class="wa-panel-sub">3 操作以内で開始</span></div>
+            <div class="wa-panel-body">
+                <div class="wa-field">
+                    <label for="mission-goal">目標</label>
+                    <textarea id="mission-goal" @bind="goal" rows="4" placeholder="例: この仕様書どおりに機能 X を実装してテストまで通す"></textarea>
+                </div>
+                <div class="wa-form-grid">
+                    <div class="wa-field">
+                        <label for="target-kind">対象種別</label>
+                        <select id="target-kind" @bind="targetKind" @bind:after="OnTargetKindChanged">
+                            <option value="Team">Team</option>
+                            <option value="Graph">Graph</option>
+                        </select>
+                    </div>
+                    <div class="wa-field">
+                        <label for="target-name">対象</label>
+                        <select id="target-name" @bind="targetName">
+                            @if (targetKind == "Team")
+                            {
+                                @foreach (var team in Teams)
+                                {
+                                    <option value="@team.Name">@(team.DisplayName ?? team.Name)</option>
+                                }
+                            }
+                            else
+                            {
+                                @foreach (var graph in Graphs)
+                                {
+                                    <option value="@graph.Name">@(graph.DisplayName ?? graph.Name)</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="wa-note wa-note-accent">承認が必要な操作は実行前に停止し、会話と Approvals から確認できます。</div>
+                <div class="wa-form-actions">
+                    <a class="wa-btn" href="missions">キャンセル</a>
+                    <button class="wa-btn wa-btn-primary" type="button" @onclick="SubmitAsync" disabled="@(isSubmitting || string.IsNullOrWhiteSpace(goal) || string.IsNullOrWhiteSpace(targetName))">
+                        @(isSubmitting ? "開始中..." : "ミッションを開始")
+                    </button>
+                </div>
+            </div>
+        </section>
+    </div>
+</div>
+
+@code {
+    private string goal = string.Empty;
+    private string targetKind = "Team";
+    private string targetName = string.Empty;
+    private bool isSubmitting;
+    private string? error;
+
+    protected override void OnInitialized()
+    {
+        if (Teams.Count == 0 && Graphs.Count > 0) targetKind = "Graph";
+        OnTargetKindChanged();
+    }
+
+    private void OnTargetKindChanged()
+    {
+        targetName = targetKind == "Team"
+            ? Teams.FirstOrDefault()?.Name ?? string.Empty
+            : Graphs.FirstOrDefault()?.Name ?? string.Empty;
+    }
+
+    private async Task SubmitAsync()
+    {
+        isSubmitting = true;
+        error = null;
+        try
+        {
+            var missionId = await MissionApi.SubmitAsync(goal.Trim(), targetKind, targetName);
+            Navigation.NavigateTo($"missions/{missionId}");
+        }
+        catch (Exception ex)
+        {
+            error = $"ミッションを開始できませんでした: {ex.Message}";
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+}

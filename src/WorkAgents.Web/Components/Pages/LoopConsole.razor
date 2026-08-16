@@ -1,0 +1,138 @@
+@page "/loops"
+@using WorkAgents.Core.Abstractions
+@using WorkAgents.Core.Loops
+@using WorkAgents.Core.Missions
+@inject ILoopStore LoopStore
+@inject IMissionStore MissionStore
+
+<PageTitle>MeshGuild AI Studio | Loop Console</PageTitle>
+
+<div class="wa-scroll-page">
+    <div class="wa-inner">
+        @if (snapshot is null)
+        {
+            <div class="wa-head"><div><h1>Loop Console</h1><p>反復の記録、収束の推移、停止条件</p></div></div>
+            <div class="wa-panel"><div class="wa-empty">記録されたループはありません。</div></div>
+        }
+        else
+        {
+            <div class="wa-head">
+                <div>
+                    <h1>Loop Console</h1>
+                    <p>@snapshot.Mission.MissionId · @snapshot.Loop.NodeRunId · 反復 @CurrentIteration / @snapshot.Loop.MaxIterations</p>
+                </div>
+                <div class="wa-head-actions">
+                    <button class="wa-btn wa-btn-sm" type="button" disabled>条件を編集</button>
+                    <button class="wa-btn wa-btn-danger wa-btn-sm" type="button" @onclick="BreakAsync" disabled="@IsStopped">現在の反復で打ち切り</button>
+                </div>
+            </div>
+
+            <div class="wa-cond-grid wa-mb-lg">
+                <div class="wa-cond"><div class="wa-cond-name">停止条件</div><div class="wa-cond-value">@StopConditionLabel</div><div class="wa-cond-note">@BlockingMetricsLabel</div></div>
+                <div class="wa-cond"><div class="wa-cond-name">反復</div><div class="wa-cond-value">@CurrentIteration / @snapshot.Loop.MaxIterations</div><div class="wa-cond-note">残り @Math.Max(0, snapshot.Loop.MaxIterations - CurrentIteration) 周</div></div>
+                <div class="wa-cond"><div class="wa-cond-name">コスト</div><div class="wa-cond-value">$@TotalCost.ToString("0.00") / $@(snapshot.Loop.CostLimitUsd?.ToString("0.00") ?? "-")</div><div class="wa-cond-note">1 周あたり平均 $@AverageCost.ToString("0.00")</div></div>
+                <div class="wa-cond @(Improvement >= 0 ? "wa-cond-met" : null)"><div class="wa-cond-name">改善傾向</div><div class="wa-cond-value">@(Improvement >= 0 ? "+" : "")@Improvement.ToString("0.00")</div><div class="wa-cond-note">直近の評価差分</div></div>
+            </div>
+
+            <div class="wa-two-col wa-mb">
+                <section class="wa-panel">
+                    <div class="wa-panel-header"><span>収束の推移</span><span class="wa-panel-sub">評価スコア (0.0 - 1.0)</span></div>
+                    <div class="wa-panel-body">
+                        <div class="wa-loop-chart">
+                            @foreach (var iteration in snapshot.Iterations)
+                            {
+                                var score = ScoreFor(iteration);
+                                <div class="wa-bar-col"><div class="wa-bar @BarClass(iteration)" style="height:@(Math.Max(10, (int)(score * 100)))%"><span>@score.ToString("0.00")</span></div><span>it.@iteration.IterationNo</span></div>
+                            }
+                            @if (snapshot.Iterations.Count == 0) { <div class="wa-empty">評価待ち</div> }
+                        </div>
+                        <div class="wa-threshold"><span>停止しきい値 @(snapshot.Loop.ScoreThreshold?.ToString("0.00") ?? "1.00")</span></div>
+                    </div>
+                </section>
+                <section class="wa-panel wa-loop-condition">
+                    <div class="wa-panel-header"><span>停止条件</span></div>
+                    <div class="wa-panel-body">
+                        <div class="wa-kv"><span>判定</span><span>@(snapshot.Loop.NodeRunId)</span></div>
+                        <div class="wa-kv"><span>スコアしきい値</span><span>@(snapshot.Loop.ScoreThreshold?.ToString("0.00") ?? "-")</span></div>
+                        <div class="wa-kv"><span>最大反復</span><span>@snapshot.Loop.MaxIterations</span></div>
+                        <div class="wa-kv"><span>コスト上限</span><span>$@(snapshot.Loop.CostLimitUsd?.ToString("0.00") ?? "-")</span></div>
+                        <div class="wa-kv"><span>時間上限</span><span>@(snapshot.Loop.TimeLimitSeconds is null ? "-" : $"{snapshot.Loop.TimeLimitSeconds / 60} 分")</span></div>
+                        <div class="wa-note wa-note-warn wa-mt">上限に先に到達した場合は「未収束で停止」として、最良の反復の成果を保持します。</div>
+                    </div>
+                </section>
+            </div>
+
+            <section class="wa-panel">
+                <div class="wa-panel-header"><span>反復の記録</span><span class="wa-panel-sub">各周の入力・成果・評価</span></div>
+                <div class="wa-table-wrap">
+                    <table class="wa-table" data-pw="iteration-records">
+                        <thead><tr><th>#</th><th>この周でやったこと</th><th>評価</th><th>差分</th><th>コスト</th><th>所要</th><th>判定</th></tr></thead>
+                        <tbody>
+                        @foreach (var iteration in snapshot.Iterations)
+                        {
+                            var score = ScoreFor(iteration);
+                            <tr><td class="wa-cell-dim">@iteration.IterationNo</td><td>@(iteration.OutputJson ?? iteration.InputJson ?? "入力と成果は未記録")</td><td class="wa-cell-dim">@score.ToString("0.00")</td><td class="wa-cell-dim">@DeltaFor(iteration)</td><td class="wa-cell-dim">$@iteration.CostUsd.ToString("0.00")</td><td class="wa-cell-dim">@DurationLabel(iteration)</td><td><span class="wa-tag @IterationClass(iteration)">@IterationLabel(iteration)</span></td></tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        }
+    </div>
+</div>
+
+@code {
+    private LoopSnapshot? snapshot;
+
+    private int CurrentIteration => snapshot?.Iterations.Select(iteration => iteration.IterationNo).DefaultIfEmpty(0).Max() ?? 0;
+    private bool IsStopped => snapshot?.Loop.StopReason is not null;
+    private double TotalCost => snapshot?.Iterations.Sum(iteration => iteration.CostUsd) ?? 0;
+    private double AverageCost => snapshot is not null && snapshot.Iterations.Count > 0 ? TotalCost / snapshot.Iterations.Count : 0;
+    private double Improvement => snapshot is not null && snapshot.Iterations.Count > 1 ? ScoreFor(snapshot.Iterations[^1]) - ScoreFor(snapshot.Iterations[^2]) : 0;
+    private string StopConditionLabel => IsStopped ? StopReasonLabel(snapshot!.Loop.StopReason) : "未達";
+    private string BlockingMetricsLabel => snapshot is null || snapshot.Metrics.Count == 0 ? "評価指標は未記録" : string.Join(" · ", snapshot.Metrics.Where(metric => !metric.Achieved).Select(metric => $"{metric.Name} {metric.Value:0.##}/{metric.Target:0.##}"));
+
+    protected override async Task OnInitializedAsync()
+    {
+        var missions = await MissionStore.ListAsync(new MissionQuery { Limit = 100 });
+        foreach (var mission in missions)
+        {
+            var loops = await LoopStore.ListLoopRunsAsync(mission.MissionId);
+            var loop = loops.LastOrDefault();
+            if (loop is null) continue;
+            var iterations = await LoopStore.ListIterationsAsync(loop.LoopRunId);
+            var evaluations = new Dictionary<string, Evaluation>();
+            var metrics = new List<EvaluationMetric>();
+            foreach (var iteration in iterations)
+            {
+                var evaluation = await LoopStore.GetEvaluationAsync(iteration.IterationId);
+                if (evaluation is null) continue;
+                evaluations[iteration.IterationId] = evaluation;
+                metrics.AddRange(await LoopStore.ListMetricsAsync(evaluation.EvaluationId));
+            }
+            snapshot = new LoopSnapshot(mission, loop, iterations, evaluations, metrics);
+            break;
+        }
+    }
+
+    private async Task BreakAsync()
+    {
+        if (snapshot is null || IsStopped) return;
+        await LoopStore.CompleteLoopRunAsync(snapshot.Loop.LoopRunId, LoopStopReason.UserBreak, snapshot.Loop.BestIterationId);
+        snapshot = snapshot with { Loop = snapshot.Loop with { StopReason = LoopStopReason.UserBreak } };
+    }
+
+    private double ScoreFor(Iteration iteration) => snapshot?.Evaluations.TryGetValue(iteration.IterationId, out var evaluation) == true ? evaluation.Score : 0;
+    private string DeltaFor(Iteration iteration)
+    {
+        var previous = snapshot?.Iterations.FirstOrDefault(value => value.IterationNo == iteration.IterationNo - 1);
+        return previous is null ? "—" : $"{ScoreFor(iteration) - ScoreFor(previous):+0.00;-0.00;0.00}";
+    }
+    private string DurationLabel(Iteration iteration) => iteration.DurationMs == 0 ? "進行中" : $"{iteration.DurationMs / 60000}m{iteration.DurationMs / 1000 % 60:00}s";
+    private string IterationLabel(Iteration iteration) => iteration.State switch { IterationState.Succeeded => "成功", IterationState.Failed => "未収束", IterationState.Discarded => "破棄", _ => "実行中" };
+    private string IterationClass(Iteration iteration) => iteration.State switch { IterationState.Succeeded => "wa-tag-ok", IterationState.Failed => "wa-tag-bad", _ => "wa-tag-warn" };
+    private string BarClass(Iteration iteration) => iteration.State switch { IterationState.Succeeded => "wa-bar-ok", IterationState.Failed => "wa-bar-bad", _ => "wa-bar-warn" };
+    private static string StopReasonLabel(LoopStopReason? reason) => reason switch { LoopStopReason.StopConditionMet => "収束", LoopStopReason.MaxIterations => "上限到達", LoopStopReason.CostLimit => "予算上限", LoopStopReason.TimeLimit => "時間上限", LoopStopReason.UserBreak => "人が打ち切り", _ => "未達" };
+
+    private sealed record LoopSnapshot(Mission Mission, LoopRun Loop, IReadOnlyList<Iteration> Iterations, IReadOnlyDictionary<string, Evaluation> Evaluations, IReadOnlyList<EvaluationMetric> Metrics);
+}

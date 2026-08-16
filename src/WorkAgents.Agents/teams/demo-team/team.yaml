@@ -1,0 +1,30 @@
+version: 1
+name: demo-team
+displayName: Demo Delivery Team
+description: A small team used by the orchestration quickstart.
+orchestrator:
+  agent: orchestrator-agent
+members:
+  - agent: spec-research-agent
+    role: specification research
+    maxInstances: 1
+  - agent: dev-agent
+    role: development
+    maxInstances: 1
+  - agent: test-agent
+    role: testing
+    maxInstances: 1
+channels:
+  default: via-orchestrator
+  allow:
+    - from: dev-agent
+      to: spec-research-agent
+      kinds: [question, answer, share]
+    - from: test-agent
+      to: dev-agent
+      kinds: [question, answer, share]
+limits:
+  maxDelegationDepth: 3
+  maxParallelInstances: 4
+  noProgressRoundTrips: 5
+  askTimeoutSeconds: 300

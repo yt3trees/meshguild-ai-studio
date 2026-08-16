@@ -1,0 +1,54 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "stop stale WorkAgents.Web",
+      "type": "process",
+      "command": "pwsh",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "$listener = Get-NetTCPConnection -LocalPort 5049 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1; if ($null -eq $listener) { exit 0 }; $process = Get-Process -Id $listener.OwningProcess -ErrorAction Stop; if ($process.ProcessName -ne 'WorkAgents.Web') { throw \"Port 5049 is in use by $($process.ProcessName) (PID $($process.Id)).\" }; Stop-Process -Id $process.Id -Force; $process.WaitForExit()"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "prepare WorkAgents.Web",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "stop stale WorkAgents.Web",
+        "build WorkAgents.Web"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "build WorkAgents.Web",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/WorkAgents.Web/WorkAgents.Web.csproj",
+        "--configuration",
+        "Debug"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "build WorkAgents.Run API",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/WorkAgents.Host/WorkAgents.Host.csproj",
+        "--configuration",
+        "Debug"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    }
+  ]
+}

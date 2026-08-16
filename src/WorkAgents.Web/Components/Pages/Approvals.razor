@@ -1,0 +1,113 @@
+@page "/approvals"
+@using WorkAgents.Core
+@using WorkAgents.Core.Abstractions
+@inject IApprovalStore ApprovalStore
+@inject IApprovalService ApprovalService
+
+<PageTitle>MeshGuild AI Studio | Approvals</PageTitle>
+
+<div class="wa-scroll-page approvals-page">
+    <div class="wa-inner">
+        <div class="wa-head">
+            <div><h1>Approvals</h1><p>実行前に停止している操作</p></div>
+            <span class="wa-head-time">自動更新中</span>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(Error))
+        {
+            <div class="wa-load-error" role="alert">@Error</div>
+        }
+
+        <section class="wa-panel wa-mb" data-pw="approval-list">
+            <div class="wa-panel-header"><span>承認待ち</span><span class="wa-panel-sub">@pendingApprovals.Count 件</span></div>
+            @if (IsBusy && pendingApprovals.Count == 0)
+            {
+                <div class="wa-empty">承認要求を読み込んでいます...</div>
+            }
+            else if (pendingApprovals.Count == 0)
+            {
+                <div class="wa-empty"><strong>All clear</strong><br />承認待ちはありません</div>
+            }
+            else
+            {
+                @foreach (var approval in pendingApprovals)
+                {
+                    var expired = approval.IsExpired(DateTimeOffset.UtcNow);
+                    <div class="wa-approval-card @(selectedApproval?.ApprovalId == approval.ApprovalId ? "selected" : null)" data-pw="approval-row" data-approval-id="@approval.ApprovalId" @onclick="() => selectedApproval = approval">
+                        <div class="wa-approval-header">
+                            <span class="wa-avatar wa-agent-dev">@(approval.Tool.Length >= 2 ? approval.Tool[..2].ToUpperInvariant() : "OP")</span>
+                            <div><div class="wa-primary-text">@approval.Title · @approval.Tool</div><div class="wa-cell-dim">@(approval.MissionId is null ? $"run {ShortId(approval.RunId)}" : $"{approval.MissionId} · {approval.IterationId ?? "mission"}") · 期限 @approval.ExpiresAt.ToLocalTime().ToString("HH:mm")</div></div>
+                            <span class="wa-tag @(expired ? "wa-tag-bad" : "wa-tag-warn")">@(expired ? "期限切れ" : "承認待ち")</span>
+                        </div>
+                        <pre class="wa-approval-args">@approval.ArgsSummary</pre>
+                        <div class="wa-inline-actions">
+                            <button class="wa-btn wa-btn-primary wa-btn-sm" type="button" @onclick:stopPropagation="true" @onclick="() => DecideAsync(approval, ApprovalStatus.Approved)" disabled="@(IsBusy || expired)">承認</button>
+                            <button class="wa-btn wa-btn-danger wa-btn-sm" type="button" @onclick:stopPropagation="true" @onclick="() => DecideAsync(approval, ApprovalStatus.Rejected)">却下</button>
+                            @if (approval.MissionId is not null) { <a class="wa-btn wa-btn-sm" href="missions/@approval.MissionId" @onclick:stopPropagation="true">会話で見る</a> }
+                        </div>
+                    </div>
+                }
+            }
+        </section>
+
+        <section class="wa-panel" role="region" aria-label="承認要求の詳細" data-pw="approval-detail">
+            <div class="wa-panel-header"><span>選択した操作</span><span class="wa-panel-sub">実行側で対象と引数を再検証します</span></div>
+            @if (selectedApproval is null)
+            {
+                <div class="wa-empty">上の承認要求を選択してください。</div>
+            }
+            else
+            {
+                <div class="wa-panel-body">
+                    <div class="wa-kv"><span>Tool</span><span>@selectedApproval.Tool</span></div>
+                    <div class="wa-kv"><span>Run ID</span><span>@selectedApproval.RunId</span></div>
+                    <div class="wa-kv"><span>Requested</span><span>@selectedApproval.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</span></div>
+                    <div class="wa-kv"><span>Expires</span><span>@selectedApproval.ExpiresAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</span></div>
+                    <pre class="wa-approval-args">@selectedApproval.ArgsSummary</pre>
+                    <div class="wa-inline-actions wa-detail-actions">
+                        <button type="button" class="wa-btn wa-btn-danger" disabled="@IsBusy" @onclick="() => DecideAsync(selectedApproval, ApprovalStatus.Rejected)">Reject</button>
+                        <button type="button" class="wa-btn wa-btn-primary" disabled="@(IsBusy || selectedApproval.IsExpired(DateTimeOffset.UtcNow))" @onclick="() => DecideAsync(selectedApproval, ApprovalStatus.Approved)">Approve &amp; resume</button>
+                    </div>
+                </div>
+            }
+        </section>
+    </div>
+</div>
+
+@code {
+    private const string LocalActor = "local-user";
+    private IReadOnlyList<ApprovalRequest> pendingApprovals = Array.Empty<ApprovalRequest>();
+    private ApprovalRequest? selectedApproval;
+    private string? Error;
+    private bool IsBusy;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        IsBusy = true;
+        Error = null;
+        try
+        {
+            pendingApprovals = await ApprovalStore.ListPendingAsync();
+            selectedApproval = pendingApprovals.FirstOrDefault(approval => approval.ApprovalId == selectedApproval?.ApprovalId) ?? pendingApprovals.FirstOrDefault();
+        }
+        catch (Exception ex) { Error = $"承認要求の読み込みに失敗しました: {ex.Message}"; }
+        finally { IsBusy = false; }
+    }
+
+    private async Task DecideAsync(ApprovalRequest approval, ApprovalStatus status)
+    {
+        IsBusy = true;
+        Error = null;
+        try
+        {
+            var decided = await ApprovalService.DecideAsync(approval.ApprovalId, status, LocalActor, status == ApprovalStatus.Rejected ? "Rejected from approval inbox." : null);
+            if (!decided) Error = "この承認要求は既に決定されています。最新状態を再読み込みしてください。";
+        }
+        catch (Exception ex) { Error = $"承認操作に失敗しました: {ex.Message}"; }
+        finally { await LoadAsync(); }
+    }
+
+    private static string ShortId(string value) => value.Length > 10 ? $"{value[..10]}..." : value;
+}

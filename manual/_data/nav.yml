@@ -1,0 +1,57 @@
+- title: はじめる
+  order: 1
+  children:
+    - title: 概要
+      path: /pages/features/
+      order: 1
+    - title: 概念を絵で理解する
+      path: /pages/concepts/
+      order: 2
+    - title: インストールと起動
+      path: /pages/getting-started/
+      order: 3
+    - title: はじめてのミッション(15分)
+      path: /pages/first-mission/
+      order: 4
+    - title: はじめてのチームを作る(画面版)
+      path: /pages/first-team/
+      order: 5
+    - title: 用語集
+      path: /pages/glossary/
+      order: 6
+- title: 作る
+  order: 2
+  children:
+    - title: 画面から定義を作る
+      path: /pages/definition-editor/
+      order: 1
+    - title: エージェントを作る
+      path: /pages/agents/
+      order: 2
+    - title: チームを作る
+      path: /pages/teams/
+      order: 3
+    - title: グラフを作る
+      path: /pages/graphs/
+      order: 4
+- title: 運用
+  order: 3
+  children:
+    - title: ファイルと成果物
+      path: /pages/storage/
+      order: 1
+    - title: 設定
+      path: /pages/configuration/
+      order: 2
+    - title: API から実行する
+      path: /pages/api/
+      order: 3
+- title: 困ったとき
+  order: 4
+  children:
+    - title: よくある質問
+      path: /pages/faq/
+      order: 1
+    - title: トラブルシューティング
+      path: /pages/troubleshooting/
+      order: 2

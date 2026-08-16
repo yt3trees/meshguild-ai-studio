@@ -1,0 +1,130 @@
+@using WorkAgents.Core.Abstractions
+@inject IApprovalStore ApprovalStore
+
+<div class="brand-row">
+    <label class="nav-toggle-label" for="nav-toggle" aria-label="メニューを開く">☰</label>
+    <a class="brand" href="" aria-label="MeshGuild AI Studio home">
+        <span class="brand-mark" aria-hidden="true">graph_7</span>
+        <span>MeshGuild AI Studio</span>
+    </a>
+</div>
+
+<input id="nav-toggle" type="checkbox" class="navbar-toggler" />
+
+<div class="nav-scrollable">
+    <nav class="nav flex-column" aria-label="メインナビゲーション">
+        <div class="nav-quick-actions" aria-label="クイックアクション">
+            <NavLink class="wa-btn wa-btn-primary wa-btn-sm nav-quick-action" href="missions/new">
+                <span class="nav-icon" aria-hidden="true">add</span>
+                <span>New mission</span>
+            </NavLink>
+            <NavLink class="@PendingTagClass" href="approvals">
+                <span class="nav-icon" aria-hidden="true">pending_actions</span>
+                <span>@PendingApprovalText</span>
+            </NavLink>
+        </div>
+        <div class="nav-section-label">Operate</div>
+        <div class="nav-item">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="nav-icon" aria-hidden="true">space_dashboard</span>
+                <span>Mission Control</span>
+            </NavLink>
+        </div>
+        <div class="nav-item">
+            <NavLink class="nav-link" href="team-room">
+                <span class="nav-icon" aria-hidden="true">groups</span>
+                <span>Team Room</span>
+            </NavLink>
+        </div>
+        <div class="nav-item">
+            <NavLink class="nav-link" href="loops">
+                <span class="nav-icon" aria-hidden="true">sync</span>
+                <span>Loop Console</span>
+            </NavLink>
+        </div>
+        <div class="nav-item">
+            <NavLink class="nav-link" href="approvals">
+                <span class="nav-icon" aria-hidden="true">fact_check</span>
+                <span>Approvals</span>
+                @if (pendingApprovalCount > 0)
+                {
+                    <span class="nav-badge">@pendingApprovalCount</span>
+                }
+            </NavLink>
+        </div>
+        <div class="nav-item">
+            <NavLink class="nav-link" href="models">
+                <span class="nav-icon" aria-hidden="true">smart_toy</span>
+                <span>Models</span>
+            </NavLink>
+        </div>
+
+        <div class="nav-divider"></div>
+        <div class="nav-section-label">Design</div>
+        <div class="nav-item">
+            <NavLink class="nav-link" href="definitions/new">
+                <span class="nav-icon" aria-hidden="true">note_add</span>
+                <span>New definition</span>
+            </NavLink>
+        </div>
+        <div class="nav-item">
+            <NavLink class="nav-link" href="graphs">
+                <span class="nav-icon" aria-hidden="true">account_tree</span>
+                <span>Graph Studio</span>
+            </NavLink>
+        </div>
+        <div class="nav-item">
+            <NavLink class="nav-link" href="teams-agents">
+                <span class="nav-icon" aria-hidden="true">group_work</span>
+                <span>Teams &amp; Agents</span>
+            </NavLink>
+        </div>
+        <div class="nav-item">
+            <NavLink class="nav-link" href="triggers">
+                <span class="nav-icon" aria-hidden="true">schedule</span>
+                <span>Triggers</span>
+            </NavLink>
+        </div>
+
+        <div class="nav-divider"></div>
+        <div class="nav-section-label">Review</div>
+        <div class="nav-item">
+            <NavLink class="nav-link" href="replay">
+                <span class="nav-icon" aria-hidden="true">history</span>
+                <span>Replay &amp; Audit</span>
+            </NavLink>
+        </div>
+    </nav>
+
+    <div class="nav-footer">
+        <div class="runtime-status">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span>Runtime connected</span>
+        </div>
+        <div class="environment">local environment</div>
+    </div>
+</div>
+
+@code {
+    private int pendingApprovalCount;
+
+    private string PendingApprovalText => pendingApprovalCount == 0
+        ? "0 approvals pending"
+        : $"{pendingApprovalCount} approvals pending";
+
+    private string PendingTagClass => pendingApprovalCount > 0
+        ? "wa-tag wa-tag-warn nav-quick-action nav-quick-pending"
+        : "wa-tag nav-quick-action nav-quick-pending";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            pendingApprovalCount = (await ApprovalStore.ListPendingAsync()).Count;
+        }
+        catch
+        {
+            pendingApprovalCount = 0;
+        }
+    }
+}

@@ -1,0 +1,23 @@
+<nav class="wa-nav">
+  <div class="wa-nav-title">目次</div>
+  <ul class="wa-nav-list">
+    {% for item in site.data.nav %}
+      {% if item.children %}
+        <li class="wa-nav-section">
+          <div class="wa-nav-section-title">{{ item.title }}</div>
+          <ul class="wa-nav-list wa-nav-children">
+            {% for child in item.children %}
+              <li>
+                <a href="{{ child.path | relative_url }}"{% if page.url == child.path %} class="is-active"{% endif %}>{{ child.title }}</a>
+              </li>
+            {% endfor %}
+          </ul>
+        </li>
+      {% else %}
+        <li>
+          <a href="{{ item.path | relative_url }}"{% if page.url == item.path %} class="is-active"{% endif %}>{{ item.title }}</a>
+        </li>
+      {% endif %}
+    {% endfor %}
+  </ul>
+</nav>

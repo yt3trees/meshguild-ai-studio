@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\WorkAgents.Agents\WorkAgents.Agents.csproj" />
+    <ProjectReference Include="..\WorkAgents.Core\WorkAgents.Core.csproj" />
+    <ProjectReference Include="..\WorkAgents.Infrastructure\WorkAgents.Infrastructure.csproj" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\WorkAgents.Agents\agents\**\*.*" Link="agents\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\WorkAgents.Agents\skills\**\*.*" Link="skills\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\WorkAgents.Agents\teams\**\*.*" Link="teams\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\WorkAgents.Agents\graphs\**\*.*" Exclude="..\WorkAgents.Agents\graphs\**\*.cs" Link="graphs\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 開発機固有の絶対パス(Agents:DefinitionSources等)を含むため、配布用publish出力には含めない。
+         ローカルの dotnet run / dotnet watch run では引き続き appsettings.Development.json が使われる。 -->
+    <Content Update="appsettings.Development.json" CopyToPublishDirectory="Never" />
+    <Content Update="appsettings.example.json" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>

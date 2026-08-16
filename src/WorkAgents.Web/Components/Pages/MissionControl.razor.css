@@ -1,0 +1,13 @@
+.mission-control-page {
+    min-height: calc(100vh - 50px);
+}
+
+.wa-panel-activity {
+    align-self: start;
+}
+
+@media (max-width: 900px) {
+    .wa-table {
+        min-width: 760px;
+    }
+}

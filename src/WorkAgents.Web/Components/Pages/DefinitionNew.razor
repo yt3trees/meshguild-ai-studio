@@ -1,0 +1,651 @@
+@page "/definitions/new"
+@using System.Text.RegularExpressions
+@using WorkAgents.Agents.Loading
+@using WorkAgents.Core.Authoring
+@using WorkAgents.Core.Graphs
+@using WorkAgents.Core.Teams
+@inject DefinitionAuthoringService Authoring
+@inject DefinitionDraftService Draft
+@inject NavigationManager Navigation
+
+<PageTitle>MeshGuild AI Studio | 新しい定義</PageTitle>
+
+<div class="wa-scroll-page">
+    <div class="wa-inner">
+        <div class="wa-head def-head">
+            <div>
+                <span class="def-kicker">New definition</span>
+                <h1>新しい定義をつくる</h1>
+                <p>白紙からではなく、雛形か既存の定義から始めます。参照するエージェントはすべて一覧から選びます。</p>
+            </div>
+        </div>
+
+        <div class="def-step">
+            <span class="def-step-no">1</span>
+            <span class="def-step-label">何をつくるか</span>
+        </div>
+        <div class="def-kind wa-mb">
+            <button type="button" class="@KindCardClass(DefinitionKind.Agent)"
+                    @onclick="@(() => SetKind(DefinitionKind.Agent))" data-pw="new-kind-agent">
+                <span class="def-kind-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="8" r="3.4" />
+                        <path d="M4.5 20c0-3.6 3.4-5.6 7.5-5.6s7.5 2 7.5 5.6" />
+                    </svg>
+                </span>
+                <span class="def-kind-text">
+                    <strong>エージェント</strong>
+                    <small>1 体の担当者。スキルと権限をここで決めます。</small>
+                </span>
+                <span class="def-kind-check" aria-hidden="true">✓</span>
+            </button>
+            <button type="button" class="@KindCardClass(DefinitionKind.Team)"
+                    @onclick="@(() => SetKind(DefinitionKind.Team))" data-pw="new-kind-team">
+                <span class="def-kind-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="6" r="2.6" />
+                        <circle cx="5.5" cy="17" r="2.6" />
+                        <circle cx="18.5" cy="17" r="2.6" />
+                        <path d="M10.4 8.2 7.1 14.6M13.6 8.2l3.3 6.4M8.1 17h7.8" />
+                    </svg>
+                </span>
+                <span class="def-kind-text">
+                    <strong>チーム</strong>
+                    <small>統括が指示を配り、メンバーが分担して進める形。</small>
+                </span>
+                <span class="def-kind-check" aria-hidden="true">✓</span>
+            </button>
+            <button type="button" class="@KindCardClass(DefinitionKind.Graph)"
+                    @onclick="@(() => SetKind(DefinitionKind.Graph))" data-pw="new-kind-graph">
+                <span class="def-kind-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2.5" y="9" width="6" height="6" rx="1.6" />
+                        <rect x="15.5" y="3.5" width="6" height="6" rx="1.6" />
+                        <rect x="15.5" y="14.5" width="6" height="6" rx="1.6" />
+                        <path d="M8.5 11.4h3.3V6.5h3.7M8.5 12.6h3.3v4.9h3.7" />
+                    </svg>
+                </span>
+                <span class="def-kind-text">
+                    <strong>グラフ</strong>
+                    <small>手順を線でつなぎ、決めた順番どおりに流す形。</small>
+                </span>
+                <span class="def-kind-check" aria-hidden="true">✓</span>
+            </button>
+        </div>
+
+        <div class="def-step">
+            <span class="def-step-no">2</span>
+            <span class="def-step-label">どこから始めるか</span>
+        </div>
+        <div class="def-seg">
+            @if (kind == DefinitionKind.Agent)
+            {
+                <button type="button" class="@SourceTabClass("blank")" @onclick="@(() => source = "blank")" data-pw="new-source-blank">白紙から</button>
+            }
+            else
+            {
+                <button type="button" class="@SourceTabClass("template")" @onclick="@(() => source = "template")" data-pw="new-source-template">テンプレートから</button>
+            }
+            <button type="button" class="@SourceTabClass("copy")" @onclick="@(() => source = "copy")" data-pw="new-source-copy">既存を複製</button>
+            @if (kind != DefinitionKind.Agent)
+            {
+                <button type="button" class="@SourceTabClass("draft")" @onclick="@(() => source = "draft")" data-pw="new-source-draft">文章から生成</button>
+            }
+        </div>
+        <p class="def-seg-help wa-mb">@SourceHelp</p>
+
+        @if (kind != DefinitionKind.Agent && Authoring.Agents.Count == 0)
+        {
+            <div class="wa-note wa-note-warn wa-mb">
+                エージェントがまだ 1 つも登録されていません。@(KindLabel)はエージェントを参照するため、先にエージェントを作ってください。
+            </div>
+        }
+
+        <div class="wa-editor-grid">
+            <div class="wa-editor-main">
+                @switch (source)
+                {
+                    case "blank":
+                        <section class="wa-panel wa-mb">
+                            <div class="wa-panel-header"><span>白紙から作る</span><span class="wa-panel-sub">名前だけ決めれば作れます</span></div>
+                            <div class="wa-panel-body">
+                                <p class="wa-field-help">
+                                    作成すると agents/&lt;name&gt;/agent.yaml と instructions.md ができます。
+                                    使える共有スキルと権限は、続けて開く編集画面で選びます。
+                                </p>
+                            </div>
+                        </section>
+                        break;
+
+                    case "template":
+                        <section class="wa-panel wa-mb">
+                            <div class="wa-panel-header"><span>雛形を選ぶ</span><span class="wa-panel-sub">迷ったら一番上</span></div>
+                            <div class="wa-panel-body">
+                                <div class="def-tpl-grid" data-pw="template-list">
+                                    @foreach (var template in DefinitionTemplates.For(kind))
+                                    {
+                                        var captured = template;
+                                        <button type="button"
+                                                class="def-tpl-card @(selectedTemplate?.Id == captured.Id ? "selected" : null)"
+                                                @onclick="() => SelectTemplate(captured)" data-pw="template-card">
+                                            <span class="def-tpl-head">
+                                                <span class="def-tpl-title">@captured.Title</span>
+                                                <span class="def-tpl-mark" aria-hidden="true">✓</span>
+                                            </span>
+                                            <span class="def-tpl-summary">@captured.Summary</span>
+                                            <span class="def-tpl-when">@captured.WhenToUse</span>
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                        </section>
+
+                        @if (selectedTemplate is not null)
+                        {
+                            <section class="wa-panel wa-mb">
+                                <div class="wa-panel-header">
+                                    <span>@selectedTemplate.Title の中身を決める</span>
+                                    <span class="wa-panel-sub">@selectedTemplate.Slots.Count 個の役に、エージェントを割り当てます</span>
+                                </div>
+                                <div class="wa-panel-body def-slot-body">
+                                    @foreach (var slot in selectedTemplate.Slots)
+                                    {
+                                        var captured = slot;
+                                        <div class="wa-field">
+                                            <label><span>@captured.Label</span><span class="wa-field-required">必須</span></label>
+                                            <p class="wa-field-help">@captured.Description</p>
+                                            <select class="wa-input" value="@SlotValue(captured.Key)"
+                                                    @onchange="args => SetSlot(captured.Key, args.Value?.ToString())"
+                                                    data-pw="template-slot-@captured.Key">
+                                                <option value="">(選んでください)</option>
+                                                @foreach (var option in Authoring.Agents)
+                                                {
+                                                    <option value="@option.Name" selected="@(SlotValue(captured.Key) == option.Name)">
+                                                        @option.Name@(string.IsNullOrWhiteSpace(option.Description) ? null : $" — {option.Description}")
+                                                    </option>
+                                                }
+                                            </select>
+                                        </div>
+                                    }
+                                </div>
+                            </section>
+                        }
+                        break;
+
+                    case "copy":
+                        <section class="wa-panel wa-mb">
+                            <div class="wa-panel-header"><span>複製元を選ぶ</span><span class="wa-panel-sub">既存の定義を写して名前を変えます</span></div>
+                            <div class="wa-panel-body">
+                                <div class="wa-field wa-field-last">
+                                    <label><span>複製元</span><span class="wa-field-required">必須</span></label>
+                                    <p class="wa-field-help">中身はそのまま写されます。作成したあとにエディタで変えられます。</p>
+                                    <select class="wa-input" value="@copySource" @onchange="args => SetCopySource(args.Value?.ToString())" data-pw="copy-source">
+                                        <option value="">(選んでください)</option>
+                                        @foreach (var option in ExistingNames)
+                                        {
+                                            <option value="@option" selected="@(copySource == option)">@option</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+                        </section>
+                        break;
+
+                    case "draft":
+                        <section class="wa-panel wa-mb">
+                            <div class="wa-panel-header"><span>やりたいことを書く</span><span class="wa-panel-sub">草案を作ってから、必ずフォームで確かめます</span></div>
+                            <div class="wa-panel-body">
+                                <div class="wa-field">
+                                    <label><span>要望</span><span class="wa-field-required">必須</span></label>
+                                    <p class="wa-field-help">日本語で構いません。誰が何を担当するか、どういう順番で進めたいかを書くと精度が上がります。</p>
+                                    <textarea class="wa-input def-draft-input" rows="5" @bind="draftRequest" data-pw="draft-request"
+                                              placeholder="@DraftPlaceholder"></textarea>
+                                </div>
+                                <div class="def-draft-actions">
+                                    <button type="button" class="wa-btn" @onclick="GenerateDraftAsync"
+                                            disabled="@(isDrafting || string.IsNullOrWhiteSpace(draftRequest) || string.IsNullOrWhiteSpace(newName))"
+                                            data-pw="draft-generate">
+                                        @(isDrafting ? "生成中…" : "草案を作る")
+                                    </button>
+                                    <span class="def-draft-note">
+                                        @(string.IsNullOrWhiteSpace(newName) ? "先に下の name を決めてください。" : "生成後もフォームで直せます。")
+                                    </span>
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(draftError))
+                                {
+                                    <div class="wa-note wa-note-warn def-note" data-pw="draft-error">@draftError</div>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(draftYaml))
+                                {
+                                    <div class="wa-subsection">
+                                        <div class="wa-subsection-head">生成された YAML</div>
+                                        <pre class="wa-yaml" data-pw="draft-yaml">@draftYaml</pre>
+                                    </div>
+                                }
+                            </div>
+                        </section>
+                        break;
+                }
+
+                <section class="wa-panel wa-mb">
+                    <div class="wa-panel-header"><span>名前</span><span class="wa-panel-sub">あとから変えるとフォルダーごと作り直しになります</span></div>
+                    <div class="wa-panel-body">
+                        <div class="wa-field wa-field-last">
+                            <label><span>name</span><span class="wa-field-required">必須</span></label>
+                            <p class="wa-field-help">フォルダー名になります。英小文字、数字、ハイフン、アンダースコアが使えます。</p>
+                            <input class="wa-input def-name-input" value="@newName" @onchange="args => SetName(args.Value?.ToString())"
+                                   placeholder="@NamePlaceholder" data-pw="new-name" />
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(nameError))
+                        {
+                            <div class="wa-note wa-note-warn def-note" data-pw="new-name-error">@nameError</div>
+                        }
+                        <p class="def-path">
+                            <span>保存先</span>
+                            <code>@Authoring.WritableRoot</code>
+                            <span class="def-path-source">@Authoring.WritableSourceLabel</span>
+                        </p>
+                    </div>
+                </section>
+
+                <div class="def-actions">
+                    <span class="def-actions-note">@ActionHint</span>
+                    <a class="wa-btn" href="@ListUrl">やめる</a>
+                    <button type="button" class="wa-btn wa-btn-primary" @onclick="CreateAsync"
+                            disabled="@(!CanCreate || isCreating)" data-pw="new-create">
+                        @(isCreating ? "作成中…" : "作成して編集へ")
+                    </button>
+                </div>
+            </div>
+
+            <div class="wa-editor-side">
+                @if (preview is not null)
+                {
+                    <div class="def-side-narration wa-mb">
+                        <NarrationPanel Title="これはこう動きます" Headline="@previewHeadline" Lines="@preview" />
+                    </div>
+                }
+                else
+                {
+                    <section class="wa-panel wa-mb">
+                        <div class="wa-panel-header"><span>これはこう動きます</span></div>
+                        <div class="def-preview-empty">
+                            <span class="def-preview-mark" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M4 7h9M4 12h16M4 17h12" />
+                                </svg>
+                            </span>
+                            <p>
+                                @(kind == DefinitionKind.Agent
+                                    ? "エージェント単体の動きは、作成後の編集画面でスキルと権限を選んで決めます。"
+                                    : "雛形か複製元を選ぶと、ここに動きの説明が出ます。")
+                            </p>
+                        </div>
+                    </section>
+                }
+
+                <div class="def-side-diag">
+                    <DiagnosticList Diagnostics="diagnostics"
+                                    ValidMessage="この内容で作成できます。"
+                                    IdleMessage="作成を押すと検証してから書き出します。" />
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "kind")] public string? KindQuery { get; set; }
+
+    private static readonly Regex NamePattern = new("^[a-z0-9][a-z0-9_-]*$", RegexOptions.Compiled);
+
+    private DefinitionKind kind = DefinitionKind.Team;
+    private string source = "template";
+    private DefinitionTemplate? selectedTemplate;
+    private readonly Dictionary<string, string> slots = new(StringComparer.Ordinal);
+    private string? copySource;
+    private string newName = string.Empty;
+    private string? nameError;
+
+    private string draftRequest = string.Empty;
+    private string? draftYaml;
+    private string? draftError;
+    private bool isDrafting;
+    private TeamDefinition? draftedTeam;
+    private GraphDefinition? draftedGraph;
+
+    private bool isCreating;
+    private IReadOnlyList<AuthoringDiagnostic>? diagnostics;
+    private IReadOnlyList<NarrationLine>? preview;
+    private string? previewHeadline;
+
+    private string KindLabel => kind switch
+    {
+        DefinitionKind.Agent => "エージェント",
+        DefinitionKind.Team => "チーム",
+        _ => "グラフ",
+    };
+
+    private string ListUrl => kind == DefinitionKind.Graph ? "graphs" : "teams-agents";
+
+    private string NamePlaceholder => kind switch
+    {
+        DefinitionKind.Agent => "code-reviewer",
+        DefinitionKind.Team => "review-team",
+        _ => "release-check",
+    };
+
+    private string DraftPlaceholder => kind == DefinitionKind.Team
+        ? "経費申請の内容をレビューするチームがほしい。実装役が下書きを作って、検証役が規程との齟齬を指摘する形にしたい。"
+        : "リリース前の確認手順を作りたい。まず計画を立てて、テストと文書確認を同時に走らせて、両方揃ったら承認を挟んで公開する。";
+
+    private IReadOnlyList<string> ExistingNames => kind switch
+    {
+        DefinitionKind.Agent => Authoring.Agents.Select(agent => agent.Name).ToArray(),
+        DefinitionKind.Team => Authoring.Teams.Select(team => team.Name).ToArray(),
+        _ => Authoring.Graphs.Select(graph => graph.Name).ToArray(),
+    };
+
+    protected override void OnParametersSet()
+    {
+        if (string.Equals(KindQuery, "graph", StringComparison.OrdinalIgnoreCase))
+        {
+            SetKind(DefinitionKind.Graph);
+        }
+        else if (string.Equals(KindQuery, "team", StringComparison.OrdinalIgnoreCase))
+        {
+            SetKind(DefinitionKind.Team);
+        }
+        else if (string.Equals(KindQuery, "agent", StringComparison.OrdinalIgnoreCase))
+        {
+            SetKind(DefinitionKind.Agent);
+        }
+    }
+
+    /// <summary>その種類で選べる入口か。エージェントは雛形と文章生成を持たない。</summary>
+    private static bool SourceFits(DefinitionKind value, string source)
+        => value == DefinitionKind.Agent
+            ? source is "blank" or "copy"
+            : source is "template" or "copy" or "draft";
+
+    private string KindCardClass(DefinitionKind value)
+        => kind == value ? "def-kind-card selected" : "def-kind-card";
+
+    private string SourceTabClass(string value)
+        => source == value ? "def-seg-btn active" : "def-seg-btn";
+
+    private string SourceHelp => source switch
+    {
+        "blank" => "名前だけ決めて作り、続けて開く編集画面でスキルと権限を選びます。",
+        "copy" => "既にある定義をそのまま写します。似た形をもう 1 つ用意したいときに。",
+        "draft" => "やりたいことを文章で書くと、草案を組み立てます。中身は必ずフォームで確かめます。",
+        _ => "よく使う形をひな型として用意しています。あとからいくらでも足せます。"
+    };
+
+    /// <summary>作成ボタンの手前で、今なにが足りないかを一言で示す。</summary>
+    private string ActionHint
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(newName))
+            {
+                return "name を決めると作成できます。";
+            }
+            if (nameError is not null)
+            {
+                return "name を直してください。";
+            }
+            if (BuildCandidate() is null)
+            {
+                return source switch
+                {
+                    "blank" => "name を決めてください。",
+                    "copy" => "複製元を選んでください。",
+                    "draft" => "草案を作ってください。",
+                    _ => "雛形と担当を選んでください。"
+                };
+            }
+            return $"{KindLabel} {newName} を作成して、エディタに移ります。";
+        }
+    }
+
+    private void SetKind(DefinitionKind value)
+    {
+        // OnParametersSet からも呼ばれるため、同じ種類なら入力を保つ。
+        var sourceFits = SourceFits(value, source);
+        if (kind == value && sourceFits)
+        {
+            return;
+        }
+        kind = value;
+        if (!sourceFits)
+        {
+            // エージェントには雛形も文章生成も無いので、入口を作れるものに寄せる。
+            source = value == DefinitionKind.Agent ? "blank" : "template";
+        }
+        selectedTemplate = null;
+        slots.Clear();
+        copySource = null;
+        draftedTeam = null;
+        draftedGraph = null;
+        draftYaml = null;
+        preview = null;
+        diagnostics = null;
+    }
+
+    private void SelectTemplate(DefinitionTemplate template)
+    {
+        selectedTemplate = template;
+        slots.Clear();
+        // 使えるエージェントが揃っていれば、重複しないよう順に割り当てておく。
+        var available = Authoring.Agents.Select(agent => agent.Name).ToList();
+        foreach (var slot in template.Slots)
+        {
+            var candidate = available.FirstOrDefault(name => !slots.ContainsValue(name)) ?? available.FirstOrDefault();
+            if (candidate is not null)
+            {
+                slots[slot.Key] = candidate;
+            }
+        }
+        UpdatePreview();
+    }
+
+    private string SlotValue(string key) => slots.GetValueOrDefault(key, string.Empty);
+
+    private void SetSlot(string key, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            slots.Remove(key);
+        }
+        else
+        {
+            slots[key] = value;
+        }
+        UpdatePreview();
+    }
+
+    private void SetCopySource(string? value)
+    {
+        copySource = string.IsNullOrWhiteSpace(value) ? null : value;
+        UpdatePreview();
+    }
+
+    private void SetName(string? value)
+    {
+        newName = value?.Trim() ?? string.Empty;
+        nameError = ValidateName();
+        UpdatePreview();
+    }
+
+    private string? ValidateName()
+    {
+        if (string.IsNullOrWhiteSpace(newName))
+        {
+            return null;
+        }
+        if (!NamePattern.IsMatch(newName))
+        {
+            return "英小文字、数字、ハイフン、アンダースコアだけが使えます。先頭は英小文字か数字にしてください。";
+        }
+        var exists = kind switch
+        {
+            DefinitionKind.Agent => Authoring.AgentExists(newName),
+            DefinitionKind.Team => Authoring.TeamExists(newName),
+            _ => Authoring.GraphExists(newName),
+        };
+        return exists ? $"{newName} という{KindLabel}は既にあります。別の名前にしてください。" : null;
+    }
+
+    private bool CanCreate
+        => !string.IsNullOrWhiteSpace(newName)
+           && nameError is null
+           && BuildCandidate() is not null;
+
+    /// <summary>選んだ入口に応じて、作成対象の定義を組み立てる。</summary>
+    private object? BuildCandidate()
+    {
+        if (string.IsNullOrWhiteSpace(newName))
+        {
+            return null;
+        }
+
+        switch (source)
+        {
+            case "blank" when kind == DefinitionKind.Agent:
+                return new AgentDefinition { Name = newName, DisplayName = newName };
+
+            case "template" when selectedTemplate is not null:
+                if (selectedTemplate.Slots.Any(slot => !slots.ContainsKey(slot.Key)))
+                {
+                    return null;
+                }
+                return kind == DefinitionKind.Team
+                    ? selectedTemplate.BuildTeam(newName, slots)
+                    : selectedTemplate.BuildGraph(newName, slots);
+
+            case "copy" when copySource is not null:
+                if (kind == DefinitionKind.Agent)
+                {
+                    var agent = Authoring.FindAgent(copySource);
+                    if (agent is null)
+                    {
+                        return null;
+                    }
+                    // フォルダーとローカルスキルは複製元のものなので引き継がない。
+                    return new AgentDefinition
+                    {
+                        Name = newName,
+                        Kind = agent.Kind,
+                        DisplayName = newName,
+                        Description = agent.Description,
+                        Instructions = agent.Instructions,
+                        SharedSkillNames = agent.SharedSkillNames.ToArray(),
+                        HarnessShell = agent.HarnessShell,
+                        HarnessFileStore = agent.HarnessFileStore,
+                    };
+                }
+                if (kind == DefinitionKind.Team)
+                {
+                    var team = Authoring.FindTeam(copySource);
+                    return team is null ? null : team with { Name = newName, DisplayName = newName, FolderPath = string.Empty };
+                }
+                var graph = Authoring.FindGraph(copySource);
+                return graph is null ? null : graph with { Name = newName, DisplayName = newName, FolderPath = string.Empty };
+
+            case "draft":
+                if (kind == DefinitionKind.Team)
+                {
+                    return draftedTeam is null ? null : draftedTeam with { Name = newName, FolderPath = string.Empty };
+                }
+                return draftedGraph is null ? null : draftedGraph with { Name = newName, FolderPath = string.Empty };
+
+            default:
+                return null;
+        }
+    }
+
+    private void UpdatePreview()
+    {
+        var candidate = BuildCandidate();
+        switch (candidate)
+        {
+            case TeamDefinition team:
+                preview = DefinitionNarrator.Describe(team);
+                previewHeadline = DefinitionNarrator.Headline(team);
+                break;
+            case GraphDefinition graph:
+                preview = DefinitionNarrator.Describe(graph);
+                previewHeadline = DefinitionNarrator.Headline(graph);
+                break;
+            default:
+                preview = null;
+                previewHeadline = null;
+                break;
+        }
+    }
+
+    private async Task GenerateDraftAsync()
+    {
+        isDrafting = true;
+        draftError = null;
+        try
+        {
+            var result = kind == DefinitionKind.Team
+                ? await Draft.DraftTeamAsync(newName, draftRequest)
+                : await Draft.DraftGraphAsync(newName, draftRequest);
+
+            draftYaml = result.Yaml;
+            draftError = result.Error;
+            draftedTeam = result.Team;
+            draftedGraph = result.Graph;
+            diagnostics = result.Diagnostics.Count > 0 ? result.Diagnostics : null;
+            UpdatePreview();
+        }
+        finally
+        {
+            isDrafting = false;
+        }
+    }
+
+    private async Task CreateAsync()
+    {
+        isCreating = true;
+        try
+        {
+            switch (BuildCandidate())
+            {
+                case AgentDefinition agent:
+                    var agentResult = await Authoring.SaveAgentAsync(agent);
+                    diagnostics = agentResult.Diagnostics;
+                    if (agentResult.Saved)
+                    {
+                        Navigation.NavigateTo($"agents/{agent.Name}/edit");
+                    }
+                    break;
+
+                case TeamDefinition team:
+                    var teamResult = await Authoring.SaveTeamAsync(team);
+                    diagnostics = teamResult.Diagnostics;
+                    if (teamResult.Saved)
+                    {
+                        Navigation.NavigateTo($"teams-agents/{team.Name}/edit");
+                    }
+                    break;
+
+                case GraphDefinition graph:
+                    var graphResult = await Authoring.SaveGraphAsync(graph);
+                    diagnostics = graphResult.Diagnostics;
+                    if (graphResult.Saved)
+                    {
+                        Navigation.NavigateTo($"graphs/{graph.Name}");
+                    }
+                    break;
+            }
+        }
+        finally
+        {
+            isCreating = false;
+        }
+    }
+}

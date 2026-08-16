@@ -1,0 +1,31 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\WorkAgents.Core\WorkAgents.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="WorkAgents.UnitTests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- MAF Harness / Tools.Shell は 1.13.0-preview(ADR-0002 参照)。AsHarnessAgent / LocalShellExecutor / ShellPolicy を提供。 -->
+    <PackageReference Include="Microsoft.Agents.AI.Harness" Version="1.13.0-preview.260703.1" />
+    <PackageReference Include="Microsoft.Agents.AI.Tools.Shell" Version="1.13.0-preview.260703.1" />
+    <!-- Git 認証(5.5): GitHub App JWT→installation token 発行。 -->
+    <PackageReference Include="Octokit" Version="14.0.0" />
+    <PackageReference Include="GitHubJwt" Version="0.0.6" />
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.9" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- MAF Harness/Shell の preview 実験シンボル解析警告を抑制(ADR-0002)。 -->
+    <NoWarn>$(NoWarn);MAAI001;OPENAI001</NoWarn>
+  </PropertyGroup>
+
+</Project>

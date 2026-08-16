@@ -1,0 +1,7 @@
+kind: Prompt
+name: repo-agent
+displayName: Repository Agent
+description: Git リポジトリを clone し、コード調査・編集・テスト実行を行うエンジニアリングエージェント(シェル付与・拘束+denylist)。
+harness:
+  shell: true
+  fileStore: workspace

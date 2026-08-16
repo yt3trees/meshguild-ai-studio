@@ -1,0 +1,853 @@
+.agent-page {
+    min-height: calc(100vh - 50px);
+    display: grid;
+    grid-template-rows: 60px 38px 1fr;
+    background: #0a0a0c;
+}
+
+.agent-directory {
+    grid-row: 1 / -1;
+    width: min(1040px, 100%);
+    margin: 0 auto;
+    padding: 56px 40px;
+    box-sizing: border-box;
+}
+
+.directory-header {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 32px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid #1c1c23;
+}
+
+.directory-kicker {
+    color: #5e8bff;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+}
+
+.directory-header h1 {
+    margin: 8px 0 6px;
+    color: #ededf2;
+    font-size: 1.65rem;
+    font-weight: 600;
+}
+
+.directory-header p,
+.directory-empty p {
+    margin: 0;
+    color: #6b6b78;
+    font-size: 0.875rem;
+}
+
+.agent-count {
+    color: #6b6b78;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.875rem;
+}
+
+.agent-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+}
+
+.agent-card {
+    min-width: 0;
+    min-height: 126px;
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr) 20px;
+    align-items: start;
+    gap: 13px;
+    padding: 20px;
+    color: inherit;
+    text-align: left;
+    background: #111116;
+    border: 1px solid #26262f;
+    border-radius: 8px;
+}
+
+.agent-card:hover,
+.agent-card:focus-visible {
+    background: #15151b;
+    border-color: #3f5ca8;
+    outline: none;
+}
+
+.agent-card-mark {
+    width: 38px;
+    height: 38px;
+    display: grid;
+    place-items: center;
+    color: #a8bdf5;
+    background: rgba(94, 139, 255, 0.1);
+    border: 1px solid rgba(94, 139, 255, 0.28);
+    border-radius: 7px;
+    font-size: 0.875rem;
+}
+
+.agent-card-content {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+}
+
+.agent-card-content strong {
+    overflow: hidden;
+    color: #ededf2;
+    font-size: 0.92rem;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.agent-card-name,
+.agent-card-meta {
+    overflow-wrap: anywhere;
+    color: #6b6b78;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.875rem;
+}
+
+.agent-card-meta {
+    margin-top: 13px;
+    color: #565662;
+}
+
+.agent-card-arrow {
+    align-self: center;
+    color: #565662;
+    font-size: 1.3rem;
+}
+
+.directory-empty {
+    min-height: 360px;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    text-align: center;
+}
+
+.directory-empty h2 {
+    margin: 16px 0 6px;
+    color: #ededf2;
+    font-size: 0.95rem;
+}
+
+.agent-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px 0 20px;
+    border-bottom: 1px solid #1c1c23;
+}
+
+.agent-identity,
+.settings-title {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+}
+
+.back-button {
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    color: #9b9ba7;
+    background: transparent;
+    border: 1px solid #26262f;
+    border-radius: 6px;
+}
+
+.back-button:hover:not(:disabled) {
+    color: #ededf2;
+    background: #16161c;
+}
+
+.agent-avatar,
+.settings-avatar {
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    color: #a8bdf5;
+    background: rgba(94, 139, 255, 0.1);
+    border: 1px solid rgba(94, 139, 255, 0.28);
+    border-radius: 7px;
+    font-size: 0.875rem;
+    flex-shrink: 0;
+}
+
+.agent-identity h1 {
+    margin: 0;
+    color: #ededf2;
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.agent-identity div > span {
+    color: #565662;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.875rem;
+}
+
+.new-thread-button {
+    height: 29px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 11px;
+    color: #c9c9d4;
+    background: #131318;
+    border: 1px solid #26262f;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    white-space: nowrap;
+}
+
+.new-thread-button .plus {
+    color: #5e8bff;
+    font-size: 0.9rem;
+    line-height: 1;
+}
+
+.new-thread-button:hover:not(:disabled) {
+    color: #ededf2;
+    background: #191920;
+    border-color: #32323d;
+}
+
+.agent-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 0 14px;
+    border-bottom: 1px solid #1c1c23;
+}
+
+.agent-tab {
+    position: relative;
+    padding: 0 11px;
+    color: #565662;
+    background: transparent;
+    border: 0;
+    font-size: 0.875rem;
+}
+
+.agent-tab.active {
+    color: #ededf2;
+    font-weight: 500;
+    border-bottom: 2px solid #5e8bff;
+    margin-bottom: -1px;
+}
+
+.agent-tab:disabled {
+    color: #3a3a44;
+    cursor: not-allowed;
+}
+
+.tab-count {
+    display: inline-flex;
+    min-width: 15px;
+    height: 15px;
+    align-items: center;
+    justify-content: center;
+    margin-left: 4px;
+    padding: 0 4px;
+    color: #a8bdf5;
+    background: rgba(94, 139, 255, 0.14);
+    border-radius: 999px;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.875rem;
+}
+
+.agent-workspace {
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(360px, 1fr) 300px;
+}
+
+.conversation-pane,
+.skills-pane,
+.traces-pane {
+    min-width: 0;
+    min-height: calc(100vh - 149px);
+    display: grid;
+    grid-template-rows: 1fr auto;
+    border-right: 1px solid #1c1c23;
+}
+
+.skills-pane,
+.traces-pane {
+    display: block;
+    padding: 24px max(24px, 6vw);
+    overflow-y: auto;
+}
+
+.trace-list {
+    max-width: 720px;
+    margin: 0 auto;
+    display: grid;
+    gap: 8px;
+}
+
+.trace-row {
+    display: grid;
+    grid-template-columns: 8px 1fr auto;
+    align-items: start;
+    gap: 12px;
+    padding: 11px 13px;
+    background: #111116;
+    border: 1px solid #26262f;
+    border-radius: 8px;
+}
+
+.trace-row-error {
+    border-color: #4a2b2b;
+    background: rgba(224, 140, 140, 0.05);
+}
+
+.trace-status {
+    width: 8px;
+    height: 8px;
+    margin-top: 5px;
+    border-radius: 50%;
+}
+
+.trace-status-ok {
+    background: #57c896;
+}
+
+.trace-status-fail {
+    background: #e08c8c;
+}
+
+.trace-main {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+}
+
+.trace-headline {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    color: #c9c9d4;
+    font-size: 0.875rem;
+}
+
+.trace-time {
+    color: #565662;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.875rem;
+}
+
+.trace-error {
+    overflow-wrap: anywhere;
+    color: #e0a1a1;
+    font-size: 0.875rem;
+}
+
+.trace-duration {
+    color: #6d96ff;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.875rem;
+    white-space: nowrap;
+}
+
+.skill-list-main {
+    max-width: 720px;
+    margin: 0 auto;
+}
+
+.skill-list-main .skill-content {
+    max-height: none;
+}
+
+.conversation-scroll {
+    min-height: 0;
+    padding: 28px max(24px, 6vw) 8px;
+    overflow-y: auto;
+}
+
+.conversation-empty {
+    position: relative;
+    height: 100%;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    text-align: center;
+}
+
+.empty-glow {
+    position: absolute;
+    top: calc(50% - 60px);
+    left: 50%;
+    width: 120px;
+    height: 120px;
+    transform: translateX(-50%);
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(94, 139, 255, 0.18), transparent 65%);
+    pointer-events: none;
+}
+
+.empty-agent-mark {
+    position: relative;
+    width: 46px;
+    height: 46px;
+    display: grid;
+    place-items: center;
+    margin-bottom: 16px;
+    color: #fff;
+    background: linear-gradient(145deg, #5c86ff, #2e57ce);
+    border-radius: 12px;
+    font-size: 1rem;
+    font-weight: 700;
+    box-shadow: 0 0 0 1px rgba(122, 158, 255, 0.3), 0 4px 18px rgba(63, 108, 224, 0.4);
+}
+
+.conversation-empty h2 {
+    margin: 0 0 6px;
+    color: #ededf2;
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.conversation-empty p {
+    margin: 0;
+    color: #6b6b78;
+    font-size: 0.875rem;
+}
+
+.message {
+    max-width: 720px;
+    margin: 0 auto 24px;
+}
+
+.message-label {
+    margin-bottom: 6px;
+    color: #565662;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.875rem;
+}
+
+.message-body {
+    margin: 0;
+    color: #c9c9d4;
+    font-family: inherit;
+    font-size: 0.875rem;
+    line-height: 1.75;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.user-message .message-body {
+    width: fit-content;
+    max-width: 78%;
+    margin-left: auto;
+    padding: 10px 14px;
+    color: #e4e4ec;
+    background: #16161c;
+    border: 1px solid #26262f;
+    border-radius: 10px 10px 3px 10px;
+    line-height: 1.65;
+}
+
+.user-message .message-label {
+    text-align: right;
+}
+
+.agent-message {
+    display: grid;
+    grid-template-columns: 26px 1fr;
+    gap: 11px;
+}
+
+.message-avatar {
+    width: 26px;
+    height: 26px;
+    display: grid;
+    place-items: center;
+    color: #a8bdf5;
+    background: rgba(94, 139, 255, 0.1);
+    border: 1px solid rgba(94, 139, 255, 0.25);
+    border-radius: 6px;
+    font-size: 0.875rem;
+}
+
+.message-main {
+    min-width: 0;
+}
+
+.error-message {
+    max-width: 720px;
+    margin: 0 auto 20px;
+    padding: 10px 13px;
+    color: #e0a1a1;
+    background: rgba(224, 140, 140, 0.06);
+    border: 1px solid #4a2b2b;
+    border-radius: 8px;
+    font-size: 0.875rem;
+}
+
+.model-warning {
+    padding: 10px;
+    color: #d8b477;
+    background: #1b160d;
+    border: 1px solid #4d3b1d;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+.model-warning a {
+    color: #9db6ff;
+}
+
+.composer-wrap {
+    padding: 14px max(20px, 6vw) 18px;
+    background: linear-gradient(180deg, rgba(10, 10, 12, 0) 0%, #0a0a0c 30%);
+}
+
+.composer {
+    max-width: 720px;
+    margin: 0 auto;
+    background: #111116;
+    border: 1px solid #26262f;
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+}
+
+.composer:focus-within {
+    border-color: #3f5ca8;
+}
+
+.composer textarea {
+    width: 100%;
+    min-height: 72px;
+    resize: vertical;
+    padding: 13px 14px 6px;
+    color: #e4e4ec;
+    background: transparent;
+    border: 0;
+    outline: 0;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    box-sizing: border-box;
+}
+
+.composer textarea::placeholder {
+    color: #4c4c58;
+}
+
+.composer-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 9px 9px 14px;
+}
+
+.composer-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.send-hint {
+    color: #3a3a44;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.875rem;
+}
+
+.thread-id {
+    color: #4c4c58;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.875rem;
+}
+
+.send-button {
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    background: linear-gradient(145deg, #5c86ff, #2e57ce);
+    border: 0;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    box-shadow: 0 2px 8px rgba(63, 108, 224, 0.35);
+}
+
+.send-button:hover:not(:disabled) {
+    filter: brightness(1.1);
+}
+
+.send-button:disabled {
+    color: #565662;
+    background: #1c1c23;
+    box-shadow: none;
+}
+
+.settings-pane {
+    min-width: 0;
+    background: #0d0d10;
+    overflow-y: auto;
+}
+
+.settings-title {
+    padding: 16px 16px 14px;
+    border-bottom: 1px solid #1c1c23;
+}
+
+.settings-title div {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+}
+
+.settings-title strong {
+    overflow: hidden;
+    color: #ededf2;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.settings-title div > span {
+    overflow: hidden;
+    color: #565662;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.875rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.settings-tabs {
+    display: flex;
+    gap: 16px;
+    padding: 0 16px;
+    color: #565662;
+    border-bottom: 1px solid #1c1c23;
+    font-size: 0.875rem;
+}
+
+.settings-tabs span {
+    display: flex;
+    align-items: center;
+    height: 38px;
+}
+
+.settings-tabs .active {
+    color: #ededf2;
+    font-weight: 500;
+    border-bottom: 2px solid #5e8bff;
+    margin-bottom: -1px;
+}
+
+.settings-content {
+    padding: 16px;
+}
+
+.setting-group {
+    margin-bottom: 16px;
+}
+
+.setting-group label {
+    display: block;
+    margin-bottom: 7px;
+    color: #6b6b78;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.setting-group .form-select {
+    min-height: 34px;
+    border-radius: 6px;
+    font-size: 0.875rem;
+}
+
+.setting-value,
+.setting-code {
+    min-height: 34px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    color: #c9c9d4;
+    background: #111116;
+    border: 1px solid #26262f;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    box-sizing: border-box;
+}
+
+.setting-value-link {
+    width: 100%;
+    justify-content: space-between;
+    color: #c9c9d4;
+    font-family: inherit;
+}
+
+.setting-value-link:hover {
+    color: #ededf2;
+    background: #16161c;
+    border-color: #32323d;
+}
+
+.setting-value-arrow {
+    color: #6d96ff;
+    font-size: 0.875rem;
+}
+
+.message-body.thinking {
+    color: #6b6b78;
+}
+
+.skill-list {
+    display: grid;
+    gap: 6px;
+}
+
+.skill-details {
+    min-width: 0;
+    background: #111116;
+    border: 1px solid #26262f;
+    border-radius: 6px;
+}
+
+.skill-details summary {
+    padding: 6px 8px;
+    cursor: pointer;
+}
+
+.skill-details summary::marker {
+    color: #6b6b78;
+}
+
+.skill-badge {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    max-width: 100%;
+    padding: 3px 5px;
+    overflow: hidden;
+    color: #c9c9d4;
+    background: #18181e;
+    border: 1px solid #30303a;
+    border-radius: 4px;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.875rem;
+    overflow-wrap: anywhere;
+}
+
+.skill-badge small {
+    color: #6b6b78;
+    font-family: inherit;
+    font-size: 0.875rem;
+}
+
+.skill-content {
+    max-height: 320px;
+    margin: 0;
+    padding: 10px;
+    overflow: auto;
+    color: #c9c9d4;
+    border-top: 1px solid #26262f;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.875rem;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.provider-mark {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #5e8bff;
+}
+
+.setting-code {
+    display: block;
+    overflow: hidden;
+    color: #7c7c89;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.875rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 20px;
+}
+
+.setting-divider {
+    height: 1px;
+    margin: 20px 0;
+    background: #1c1c23;
+}
+
+.setting-summary {
+    display: grid;
+    gap: 13px;
+}
+
+.setting-summary > div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: #9b9ba7;
+    font-size: 0.875rem;
+}
+
+.setting-state {
+    color: #565662;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.875rem;
+}
+
+@media (max-width: 900px) {
+    .agent-workspace {
+        grid-template-columns: 1fr;
+    }
+
+    .conversation-pane {
+        min-height: 560px;
+        border-right: 0;
+    }
+
+    .settings-pane {
+        border-top: 1px solid #1c1c23;
+    }
+}
+
+@media (max-width: 520px) {
+    .agent-directory {
+        padding: 32px 16px;
+    }
+
+    .directory-header {
+        align-items: start;
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    .agent-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .conversation-scroll {
+        padding: 24px 16px 8px;
+    }
+
+    .composer-wrap {
+        padding-right: 12px;
+        padding-left: 12px;
+    }
+}

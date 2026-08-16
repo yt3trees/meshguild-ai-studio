@@ -1,0 +1,129 @@
+@page "/replay"
+@using WorkAgents.Core.Abstractions
+@using WorkAgents.Core.Loops
+@using WorkAgents.Core.Missions
+@using WorkAgents.Orchestration.Replay
+@inject IMissionStore MissionStore
+@inject ILoopStore LoopStore
+@inject MissionReportBuilder ReportBuilder
+
+<PageTitle>MeshGuild AI Studio | Replay &amp; Audit</PageTitle>
+
+<div class="wa-scroll-page">
+    <div class="wa-inner">
+        <div class="wa-head">
+            <div><h1>Replay &amp; Audit</h1><p>完了したミッションの振り返り</p></div>
+            <div class="wa-head-actions"><select class="wa-filter" @bind="outcomeFilter"><option value="">結果で絞り込み</option><option value="Succeeded">成功</option><option value="NotConverged">未収束で停止</option><option value="Failed">失敗</option><option value="Aborted">中断</option></select><button class="wa-btn wa-btn-sm" type="button" @onclick="LoadAsync">更新</button></div>
+        </div>
+
+        <div class="wa-stat-grid">
+            <div class="wa-stat-card"><div class="wa-stat-label">完了</div><div class="wa-stat-value">@missions.Count</div><div class="wa-stat-note">記録済み</div></div>
+            <div class="wa-stat-card"><div class="wa-stat-label">成功率</div><div class="wa-stat-value">@SuccessRate%</div><div class="wa-stat-note wa-stat-note-ok">@SucceededCount 件成功</div></div>
+            <div class="wa-stat-card"><div class="wa-stat-label">未収束で停止</div><div class="wa-stat-value">@missions.Count(m => m.Outcome == MissionOutcome.NotConverged)</div><div class="wa-stat-note wa-stat-note-warn">上限到達</div></div>
+            <div class="wa-stat-card"><div class="wa-stat-label">平均反復</div><div class="wa-stat-value">@AverageIterations.ToString("0.0")</div><div class="wa-stat-note">記録されたループから算出</div></div>
+        </div>
+
+        <div class="wa-two-col wa-mb">
+            <section class="wa-panel">
+                <div class="wa-panel-header"><span>完了ミッション</span><span class="wa-panel-sub">@missions.Count 件</span></div>
+                @if (missions.Count == 0)
+                {
+                    <div class="wa-empty">完了したミッションはありません。</div>
+                }
+                else
+                {
+                    <div class="wa-table-wrap">
+                        <table class="wa-table" data-pw="completed-missions">
+                            <thead><tr><th>Mission</th><th>結果</th><th>反復</th><th>コスト</th><th>所要</th><th></th></tr></thead>
+                            <tbody>
+                            @foreach (var mission in missions)
+                            {
+                                <tr data-pw="completed-mission">
+                                    <td><div class="wa-primary-text">@mission.Goal</div><div class="wa-cell-dim">@mission.MissionId · @mission.CompletedAt?.ToLocalTime().ToString("MM-dd HH:mm")</div></td>
+                                    <td><span class="wa-tag @OutcomeClass(mission.Outcome)">@OutcomeLabel(mission.Outcome)</span></td>
+                                    <td class="wa-cell-dim">@IterationCount(mission.MissionId)</td>
+                                    <td class="wa-cell-dim">$@CostFor(mission.MissionId).ToString("0.00")</td>
+                                    <td class="wa-cell-dim">@DurationFor(mission)</td>
+                                    <td><a class="wa-btn wa-btn-sm" href="missions/@mission.MissionId">再生</a></td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </section>
+            <section class="wa-panel wa-replay-detail">
+                <div class="wa-panel-header"><span>エージェント別の内訳</span><span class="wa-panel-sub">@(missions.FirstOrDefault()?.MissionId ?? "—")</span></div>
+                <div class="wa-panel-body">
+                    @if (report is null || report.ByAgent.Count == 0)
+                    {
+                        <div class="wa-empty">コスト記録はまだありません。</div>
+                    }
+                    else
+                    {
+                        @foreach (var agent in report.ByAgent)
+                        {
+                            <div class="wa-meter"><div class="wa-meter-head"><span>@agent.AgentName</span><span>$@agent.EstimatedCostUsd.ToString("0.00") · @agent.Tokens tok</span></div><div class="wa-meter-bar"><div class="wa-meter-fill wa-fill-accent" style="width:@CostWidth(agent.EstimatedCostUsd)%"></div></div></div>
+                        }
+                    }
+                    <div class="wa-note wa-note-warn wa-mt">会話、通過経路、反復評価、エージェント別コストをミッション単位で追跡できます。</div>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+
+@code {
+    private IReadOnlyList<Mission> missions = Array.Empty<Mission>();
+    private IReadOnlyDictionary<string, int> iterationCounts = new Dictionary<string, int>();
+    private IReadOnlyDictionary<string, double> costs = new Dictionary<string, double>();
+    private MissionReport? report;
+    private string outcomeFilter = string.Empty;
+
+    private int SucceededCount => missions.Count(mission => mission.Outcome == MissionOutcome.Succeeded);
+    private int SuccessRate => missions.Count == 0 ? 0 : (int)Math.Round(SucceededCount * 100d / missions.Count);
+    private double AverageIterations => iterationCounts.Count == 0 ? 0 : iterationCounts.Values.Average();
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        var outcome = Enum.TryParse<MissionOutcome>(outcomeFilter, true, out var parsed) ? new[] { parsed } : null;
+        missions = await MissionStore.ListAsync(new MissionQuery { Outcomes = outcome, Limit = 100 });
+        var iterationMap = new Dictionary<string, int>(StringComparer.Ordinal);
+        var costMap = new Dictionary<string, double>(StringComparer.Ordinal);
+        foreach (var mission in missions)
+        {
+            var loops = await ResolveLoopCountAsync(mission.MissionId);
+            iterationMap[mission.MissionId] = loops;
+            var budget = await MissionStore.GetBudgetAsync(mission.MissionId);
+            costMap[mission.MissionId] = budget?.CostUsedUsd ?? 0;
+        }
+        iterationCounts = iterationMap;
+        costs = costMap;
+        report = missions.FirstOrDefault() is { } selected ? await ReportBuilder.BuildAsync(selected.MissionId) : null;
+    }
+
+    private async Task<int> ResolveLoopCountAsync(string missionId)
+    {
+        var loops = await GetLoopsAsync(missionId);
+        return loops;
+    }
+
+    private async Task<int> GetLoopsAsync(string missionId)
+    {
+        var count = 0;
+        foreach (var loop in await LoopStore.ListLoopRunsAsync(missionId))
+        {
+            count += (await LoopStore.ListIterationsAsync(loop.LoopRunId)).Count;
+        }
+        return count;
+    }
+
+    private int IterationCount(string missionId) => iterationCounts.GetValueOrDefault(missionId);
+    private double CostFor(string missionId) => costs.GetValueOrDefault(missionId);
+    private int CostWidth(double value) => CostFor(missions.FirstOrDefault()?.MissionId ?? string.Empty) <= 0 ? 0 : Math.Clamp((int)(value / Math.Max(0.01, costs.Values.DefaultIfEmpty().Max()) * 100), 4, 100);
+    private string DurationFor(Mission mission) => mission.StartedAt is not null && mission.CompletedAt is not null ? $"{(int)(mission.CompletedAt.Value - mission.StartedAt.Value).TotalMinutes}m" : "—";
+    private static string OutcomeLabel(MissionOutcome? outcome) => outcome switch { MissionOutcome.Succeeded => "成功", MissionOutcome.NotConverged => "未収束で停止", MissionOutcome.Failed => "失敗", MissionOutcome.Aborted => "中断", _ => "—" };
+    private static string OutcomeClass(MissionOutcome? outcome) => outcome switch { MissionOutcome.Succeeded => "wa-tag-ok", MissionOutcome.NotConverged => "wa-tag-warn", MissionOutcome.Failed or MissionOutcome.Aborted => "wa-tag-bad", _ => string.Empty };
+}

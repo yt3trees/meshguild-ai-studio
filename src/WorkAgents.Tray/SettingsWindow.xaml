@@ -1,0 +1,274 @@
+<ui:FluentWindow x:Class="WorkAgents.Tray.SettingsWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="WorkAgents 設定"
+                 Width="1180"
+                 Height="900"
+                 MinWidth="980"
+                 MinHeight="720"
+                 WindowStartupLocation="CenterScreen"
+                 ResizeMode="CanResize"
+                 ExtendsContentIntoTitleBar="True"
+                 UseLayoutRounding="True"
+                 SnapsToDevicePixels="True"
+                 TextOptions.TextFormattingMode="Display"
+                 TextOptions.TextRenderingMode="ClearType"
+                 FontFamily="Segoe UI"
+                 FontSize="14"
+                 Background="{ui:ThemeResource ApplicationBackgroundBrush}"
+                 Foreground="{ui:ThemeResource TextFillColorPrimaryBrush}">
+    <ui:FluentWindow.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ui:ThemesDictionary Theme="Dark" />
+                <ui:ControlsDictionary />
+            </ResourceDictionary.MergedDictionaries>
+            <Style TargetType="TextBlock">
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="Foreground" Value="{ui:ThemeResource TextFillColorPrimaryBrush}" />
+            </Style>
+            <SolidColorBrush x:Key="ListViewItemPillFillBrush" Color="Transparent" />
+        </ResourceDictionary>
+    </ui:FluentWindow.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0"
+                     Title="WorkAgents 設定"
+                     Height="48"
+                     Background="#172B4D"
+                     Foreground="White"
+                     ButtonsForeground="White"
+                     ButtonsBackground="#172B4D"
+                     ShowMaximize="True"
+                     ShowMinimize="True"
+                     ShowClose="True" />
+
+        <Border Grid.Row="1" Background="#172B4D" Padding="34,18,34,22">
+            <StackPanel>
+                <TextBlock Text="ランチャー設定" FontSize="28" FontWeight="SemiBold" Foreground="White" />
+                <TextBlock Text="接続先、保存先、定義ソース、運用設定を次回起動時に適用します。"
+                           FontSize="14"
+                           Foreground="#C7D7EE"
+                           Margin="0,6,0,0" />
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer Grid.Row="2"
+                      Padding="34,28,34,24"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <StackPanel MaxWidth="1400">
+                <ui:Card Padding="24" Margin="0,0,0,18">
+                    <StackPanel>
+                        <TextBlock Text="接続設定" FontSize="19" FontWeight="SemiBold" />
+                        <TextBlock Text="Web UIとHost APIが待ち受けるポートです。2つは異なる番号にしてください。"
+                                   Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"
+                                   Margin="0,5,0,18" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1*" />
+                                <ColumnDefinition Width="32" />
+                                <ColumnDefinition Width="1*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Webポート" FontWeight="SemiBold" />
+                                <TextBlock Text="Web UIの接続ポート" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,2,0,7" />
+                                <ui:TextBox x:Name="WebPortInput" PlaceholderText="5049" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="Hostポート" FontWeight="SemiBold" />
+                                <TextBlock Text="Host APIの接続ポート" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" FontSize="12" Margin="0,2,0,7" />
+                                <ui:TextBox x:Name="HostPortInput" PlaceholderText="5160" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </ui:Card>
+
+                <ui:Card Padding="24" Margin="0,0,0,18">
+                    <StackPanel>
+                        <TextBlock Text="保存先と定義ソース" FontSize="19" FontWeight="SemiBold" />
+                        <TextBlock Text="空欄は本体の既定値を使用します。状態DBはWeb/Hostで同じファイルを指定し、追加ソースは上から順に読み込まれます。"
+                                   Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"
+                                   Margin="0,5,0,18" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="330" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="98" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,18,14">
+                                <TextBlock Text="Workspace:Root" FontWeight="SemiBold" />
+                                <TextBlock Text="Run/Mission作業ファイルの保存ルート" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" FontSize="12" />
+                            </StackPanel>
+                            <ui:TextBox x:Name="WorkspaceRootInput" Grid.Row="0" Grid.Column="1" Margin="0,0,12,14" PlaceholderText="C:\work-agents\runs" />
+                            <ui:Button Content="参照..." Grid.Row="0" Grid.Column="2" Click="BrowseWorkspaceClicked" Margin="0,0,0,14" />
+
+                            <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,18,14">
+                                <TextBlock Text="Artifacts:Root" FontWeight="SemiBold" />
+                                <TextBlock Text="成果物ファイルの保存ルート" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" FontSize="12" />
+                            </StackPanel>
+                            <ui:TextBox x:Name="ArtifactsRootInput" Grid.Row="1" Grid.Column="1" Margin="0,0,12,14" PlaceholderText="C:\work-agents\artifacts" />
+                            <ui:Button Content="参照..." Grid.Row="1" Grid.Column="2" Click="BrowseArtifactsClicked" Margin="0,0,0,14" />
+
+                            <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,18,14">
+                                <TextBlock Text="Runs:DatabasePath" FontWeight="SemiBold" />
+                                <TextBlock Text="Run/Mission/Approval状態を保存するSQLiteファイル" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" FontSize="12" />
+                            </StackPanel>
+                            <ui:TextBox x:Name="DatabasePathInput" Grid.Row="2" Grid.Column="1" Margin="0,0,12,14" PlaceholderText="C:\work-agents\state\work-agents.db" />
+                            <ui:Button Content="選択..." Grid.Row="2" Grid.Column="2" Click="BrowseDatabaseClicked" Margin="0,0,0,14" />
+
+                            <StackPanel Grid.Row="3" Grid.Column="0" Margin="0,0,18,0">
+                                <TextBlock Text="Agents:DefinitionSources" FontWeight="SemiBold" />
+                                <TextBlock Text="標準ソースの後ろに追加する定義フォルダ(順序付き)" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" FontSize="12" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ui:ListView x:Name="DefinitionList"
+                                        Grid.Row="3"
+                                        Grid.Column="1"
+                                        Height="164"
+                                        Margin="0,0,12,0"
+                                        ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                        ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                        SelectionChanged="DefinitionListSelectionChanged" />
+                            <StackPanel Grid.Row="3" Grid.Column="2">
+                                <ui:Button Content="追加..." Click="AddDefinitionClicked" Margin="0,0,0,6" />
+                                <ui:Button x:Name="RemoveDefinitionButton" Content="削除" Click="RemoveDefinitionClicked" Margin="0,0,0,6" />
+                                <ui:Button x:Name="MoveDefinitionUpButton" Content="上へ" Click="MoveDefinitionUpClicked" Margin="0,0,0,6" />
+                                <ui:Button x:Name="MoveDefinitionDownButton" Content="下へ" Click="MoveDefinitionDownClicked" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </ui:Card>
+
+                <ui:Card Padding="24" Margin="0,0,0,18">
+                    <StackPanel>
+                        <TextBlock Text="運用設定" FontSize="19" FontWeight="SemiBold" />
+                        <TextBlock Text="configuration.mdに記載されている設定を個別に編集できます。空欄はappsettingsの既定値を使います。"
+                                   Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"
+                                   Margin="0,5,0,20" />
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="390" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,20,16"><TextBlock Text="Profile" FontWeight="SemiBold" /><TextBlock Text="実行プロファイル" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" FontSize="12" /></StackPanel>
+                            <ui:TextBox x:Name="ProfileInput" Grid.Row="0" Grid.Column="1" Margin="0,0,0,16" PlaceholderText="Local" />
+                            <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,20,16"><TextBlock Text="Workspace:Retention:Enabled" FontWeight="SemiBold" /><TextBlock Text="Workspace保持期限の自動削除を有効にするか" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" FontSize="12" /></StackPanel>
+                            <ui:TextBox x:Name="RetentionEnabledInput" Grid.Row="1" Grid.Column="1" Margin="0,0,0,16" PlaceholderText="true / false" />
+                            <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,20,16"><TextBlock Text="Workspace:Retention:RetentionPeriod" FontWeight="SemiBold" /><TextBlock Text="終端状態のWorkspaceを残す期間(例: 7.00:00:00)" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" FontSize="12" /></StackPanel>
+                            <ui:TextBox x:Name="RetentionPeriodInput" Grid.Row="2" Grid.Column="1" Margin="0,0,0,16" PlaceholderText="7.00:00:00" />
+                            <StackPanel Grid.Row="3" Grid.Column="0" Margin="0,0,20,16"><TextBlock Text="Workspace:Retention:SweepInterval" FontWeight="SemiBold" /><TextBlock Text="保持期限を確認する間隔(例: 01:00:00)" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" FontSize="12" /></StackPanel>
+                            <ui:TextBox x:Name="SweepIntervalInput" Grid.Row="3" Grid.Column="1" Margin="0,0,0,16" PlaceholderText="01:00:00" />
+                            <StackPanel Grid.Row="4" Grid.Column="0" Margin="0,0,20,16"><TextBlock Text="Runs:QueueCapacity" FontWeight="SemiBold" /><TextBlock Text="実行待ちRunを積めるキューの上限件数" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" FontSize="12" /></StackPanel>
+                            <ui:TextBox x:Name="QueueCapacityInput" Grid.Row="4" Grid.Column="1" Margin="0,0,0,16" PlaceholderText="100" />
+                            <StackPanel Grid.Row="5" Grid.Column="0" Margin="0,0,20,16"><TextBlock Text="SecretStore:Root" FontWeight="SemiBold" /><TextBlock Text="Local secret store(DPAPI保護ファイル)の保存フォルダ" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" FontSize="12" /></StackPanel>
+                            <ui:TextBox x:Name="SecretStoreRootInput" Grid.Row="5" Grid.Column="1" Margin="0,0,0,16" PlaceholderText="%LocalAppData%\work-agents\secrets" />
+                            <StackPanel Grid.Row="6" Grid.Column="0" Margin="0,0,20,16"><TextBlock Text="GitAuth:AppId / InstallationId" FontWeight="SemiBold" /><TextBlock Text="GitHub Appの認証に使うID。秘密鍵本体は入力しない" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" FontSize="12" /></StackPanel>
+                            <Grid Grid.Row="6" Grid.Column="1" Margin="0,0,0,16"><Grid.ColumnDefinitions><ColumnDefinition Width="1*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="1*" /></Grid.ColumnDefinitions><ui:TextBox x:Name="GitAppIdInput" Grid.Column="0" PlaceholderText="123456" /><ui:TextBox x:Name="GitInstallationIdInput" Grid.Column="2" PlaceholderText="78901234" /></Grid>
+                            <StackPanel Grid.Row="7" Grid.Column="0" Margin="0,0,20,16"><TextBlock Text="GitAuth:PrivateKeySecretName" FontWeight="SemiBold" /><TextBlock Text="Local secret storeから秘密鍵を取得する際の参照名" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" FontSize="12" /></StackPanel>
+                            <ui:TextBox x:Name="PrivateKeySecretNameInput" Grid.Row="7" Grid.Column="1" Margin="0,0,0,16" PlaceholderText="github-app-private-key" />
+                            <StackPanel Grid.Row="8" Grid.Column="0" Margin="0,0,20,16"><TextBlock Text="Orchestration:HostBaseUrl" FontWeight="SemiBold" /><TextBlock Text="WebがHost APIへ接続するベースURL" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" FontSize="12" /></StackPanel>
+                            <ui:TextBox x:Name="HostBaseUrlInput" Grid.Row="8" Grid.Column="1" Margin="0,0,0,16" PlaceholderText="http://localhost:5160" />
+                            <StackPanel Grid.Row="9" Grid.Column="0" Margin="0,0,20,16"><TextBlock Text="Orchestration:Engine:Enabled" FontWeight="SemiBold" /><TextBlock Text="ミッション実行エンジンを起動するか" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" FontSize="12" /></StackPanel>
+                            <ui:TextBox x:Name="EngineEnabledInput" Grid.Row="9" Grid.Column="1" Margin="0,0,0,16" PlaceholderText="true / false" />
+                            <StackPanel Grid.Row="10" Grid.Column="0" Margin="0,0,20,16"><TextBlock Text="Orchestration:Limits:MaxConcurrentMissions" FontWeight="SemiBold" /><TextBlock Text="同時に実行できるミッション数の上限" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" FontSize="12" /></StackPanel>
+                            <ui:TextBox x:Name="MaxConcurrentMissionsInput" Grid.Row="10" Grid.Column="1" Margin="0,0,0,16" PlaceholderText="5" />
+                            <StackPanel Grid.Row="11" Grid.Column="0" Margin="0,0,20,16"><TextBlock Text="Orchestration:Limits:MaxConcurrentAgents" FontWeight="SemiBold" /><TextBlock Text="同時に実行できるエージェント数の上限" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" FontSize="12" /></StackPanel>
+                            <ui:TextBox x:Name="MaxConcurrentAgentsInput" Grid.Row="11" Grid.Column="1" Margin="0,0,0,16" PlaceholderText="12" />
+                            <StackPanel Grid.Row="12" Grid.Column="0" Margin="0,0,20,16"><TextBlock Text="Orchestration:Limits:AskTimeoutSeconds" FontWeight="SemiBold" /><TextBlock Text="エージェントからの質問を待つタイムアウト秒数" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" FontSize="12" /></StackPanel>
+                            <ui:TextBox x:Name="AskTimeoutSecondsInput" Grid.Row="12" Grid.Column="1" Margin="0,0,0,16" PlaceholderText="300" />
+                            <StackPanel Grid.Row="13" Grid.Column="0" Margin="0,0,20,16"><TextBlock Text="Orchestration:Checkpoint:MaxWorkspaceBytes" FontWeight="SemiBold" /><TextBlock Text="チェックポイントとしてコピーできるWorkspaceの上限バイト数" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" FontSize="12" /></StackPanel>
+                            <ui:TextBox x:Name="MaxWorkspaceBytesInput" Grid.Row="13" Grid.Column="1" Margin="0,0,0,16" PlaceholderText="536870912" />
+                            <StackPanel Grid.Row="14" Grid.Column="0" Margin="0,0,20,16"><TextBlock Text="Orchestration:Triggers:Webhook:Loopback" FontWeight="SemiBold" /><TextBlock Text="Webhook受信をループバック接続に限定するか" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" FontSize="12" /></StackPanel>
+                            <ui:TextBox x:Name="WebhookLoopbackInput" Grid.Row="14" Grid.Column="1" Margin="0,0,0,16" PlaceholderText="true / false" />
+                            <StackPanel Grid.Row="15" Grid.Column="0" Margin="0,0,20,16"><TextBlock Text="Streaming:Enabled" FontWeight="SemiBold" /><TextBlock Text="エージェントの応答を生成中から逐次表示するか" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" FontSize="12" /></StackPanel>
+                            <ui:TextBox x:Name="StreamingEnabledInput" Grid.Row="15" Grid.Column="1" Margin="0,0,0,16" PlaceholderText="true / false" />
+                            <StackPanel Grid.Row="16" Grid.Column="0" Margin="0,0,20,0"><TextBlock Text="Agents:ToolPluginDirectories / AllowedHosts" FontWeight="SemiBold" /><TextBlock Text="プラグイン配置先と接続許可ホスト。下のリストへ1行1項目で入力" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" FontSize="12" /></StackPanel>
+                            <Grid Grid.Row="16" Grid.Column="1"><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions><ui:TextBox x:Name="ToolPluginDirectoriesInput" Grid.Row="0" Height="86" AcceptsReturn="True" TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" PlaceholderText="C:\teams\sales-agents\tools" /><ui:TextBox x:Name="AllowedHostsInput" Grid.Row="1" Height="86" Margin="0,10,0,0" AcceptsReturn="True" TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" PlaceholderText="intranet-api.example.local" /></Grid>
+                            <StackPanel Grid.Row="17" Grid.Column="0" Margin="0,16,20,0"><TextBlock Text="Mcp:Enabled" FontWeight="SemiBold" /><TextBlock Text="Local MCPサーバ endpointを有効にするか" Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}" FontSize="12" /></StackPanel>
+                            <ui:TextBox x:Name="McpEnabledInput" Grid.Row="17" Grid.Column="1" Margin="0,16,0,0" PlaceholderText="true / false" />
+                        </Grid>
+
+                        <TextBlock Text="その他の設定 (キー=値)" FontWeight="SemiBold" Margin="0,24,0,5" />
+                        <TextBlock Text="表にない将来のキーだけを入力してください。例: Custom:Option=value。空行と#で始まる行は無視します。"
+                                   Foreground="{ui:ThemeResource TextFillColorSecondaryBrush}"
+                                   FontSize="12"
+                                   Margin="0,0,0,8" />
+                        <ui:TextBox x:Name="OtherConfigurationInput"
+                                    Height="130"
+                                    AcceptsReturn="True"
+                                    TextWrapping="NoWrap"
+                                    VerticalScrollBarVisibility="Auto"
+                                    HorizontalScrollBarVisibility="Auto"
+                                    PlaceholderText="Custom:Option=value" />
+                    </StackPanel>
+                </ui:Card>
+            </StackPanel>
+        </ScrollViewer>
+
+        <Border Grid.Row="3" Background="{ui:ThemeResource SolidBackgroundFillColorBaseBrush}" Padding="34,16">
+            <Grid>
+                <TextBlock x:Name="ErrorText"
+                           Foreground="#FF8B8B"
+                           VerticalAlignment="Center"
+                           TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <ui:Button Content="キャンセル" IsCancel="True" Appearance="Secondary" Width="120" Margin="0,0,10,0" />
+                    <ui:Button x:Name="SaveButton"
+                               Content="保存"
+                               IsDefault="True"
+                               Appearance="Primary"
+                               Width="120"
+                               FontWeight="SemiBold"
+                               Background="#2F80ED"
+                               Foreground="White"
+                               BorderBrush="#62AEFF"
+                               MouseOverBackground="#4295F5"
+                               MouseOverBorderBrush="#8BC5FF"
+                               PressedBackground="#1F5FAF"
+                               PressedForeground="White"
+                               CornerRadius="6"
+                               Click="SaveClicked" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</ui:FluentWindow>

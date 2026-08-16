@@ -1,0 +1,40 @@
+@using WorkAgents.Core.Authoring
+
+@*
+    書いた定義が「結局どう動くのか」を日本語で読み返せるようにする (案C)。
+    書き手の検算と、レビューする側の読み物を兼ねる。
+*@
+
+<section class="wa-panel wa-narration" data-pw="narration">
+    <div class="wa-panel-header">
+        <span>@Title</span>
+        @if (!string.IsNullOrWhiteSpace(Headline))
+        {
+            <span class="wa-panel-sub">@Headline</span>
+        }
+    </div>
+    @if (Lines is null || Lines.Count == 0)
+    {
+        <div class="wa-empty">説明を組み立てられませんでした。</div>
+    }
+    else
+    {
+        <dl class="wa-narration-list">
+            @foreach (var line in Lines)
+            {
+                <div class="wa-narration-row" data-pw="narration-row">
+                    <dt>@line.Heading</dt>
+                    <dd>@line.Text</dd>
+                </div>
+            }
+        </dl>
+    }
+</section>
+
+@code {
+    [Parameter] public string Title { get; set; } = "この定義はこう動きます";
+
+    [Parameter] public string? Headline { get; set; }
+
+    [Parameter] public IReadOnlyList<NarrationLine>? Lines { get; set; }
+}

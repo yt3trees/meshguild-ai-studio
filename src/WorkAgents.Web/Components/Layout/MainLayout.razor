@@ -1,0 +1,87 @@
+@inherits LayoutComponentBase
+@using WorkAgents.Web.Components.Layout
+@implements IDisposable
+@inject NavigationManager Navigation
+
+<div class="page">
+    @if (isInteractive)
+    {
+        <span data-pw="blazor-ready" aria-hidden="true"></span>
+    }
+
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main class="workspace">
+        <header class="workspace-header">
+            <div class="workspace-context">
+                <span>MeshGuild AI Studio</span>
+                <span class="context-separator">/</span>
+                <span class="context-current">@CurrentContext</span>
+            </div>
+        </header>
+
+        <article class="content">
+            @Body
+        </article>
+    </main>
+</div>
+
+<ApprovalWatcher />
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+<script src="js/approvals.js"></script>
+
+@code {
+    private bool isInteractive;
+
+    private string CurrentContext
+    {
+        get
+        {
+            var path = new Uri(Navigation.Uri).AbsolutePath.Trim('/');
+            if (path == "missions/new") return "New mission";
+            if (path.StartsWith("missions/", StringComparison.OrdinalIgnoreCase)) return "Team Room";
+            return path switch
+            {
+                "" or "missions" => "Mission Control",
+                "team-room" => "Team Room",
+                "graphs" => "Graph Studio",
+                "loops" => "Loop Console",
+                "triggers" => "Triggers",
+                "teams-agents" => "Teams & Agents",
+                "approvals" => "Approvals",
+                "replay" => "Replay & Audit",
+                _ => "Console",
+            };
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs args)
+        => InvokeAsync(StateHasChanged);
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            isInteractive = true;
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
+}

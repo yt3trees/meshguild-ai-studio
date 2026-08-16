@@ -1,0 +1,105 @@
+@using WorkAgents.Core
+@using WorkAgents.Core.Abstractions
+@using Microsoft.JSInterop
+@inject IJSRuntime JS
+@inject IApprovalStore ApprovalStore
+@implements IAsyncDisposable
+
+@* 不可視コンポーネント(5.13.4)。5 秒ごとに ListPendingAsync を引き、
+    前回差分の新規承認要求についてブラウザデスクトップ通知を呼ぶ。*@
+
+@code {
+    private System.Threading.PeriodicTimer? _timer;
+    private System.Threading.CancellationTokenSource? _cts;
+    private HashSet<string> _knownApprovalIds = new(StringComparer.Ordinal);
+    private bool _permissionRequested;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _cts = new System.Threading.CancellationTokenSource();
+        _timer = new System.Threading.PeriodicTimer(TimeSpan.FromSeconds(5));
+        try
+        {
+            var initial = await ApprovalStore.ListPendingAsync();
+            foreach (var a in initial)
+            {
+                _knownApprovalIds.Add(a.ApprovalId);
+            }
+        }
+        catch
+        {
+            // 起動直後は store 未初期化の可能性がある。無視して次回で再試行。
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (await _timer.WaitForNextTickAsync(_cts.Token))
+                {
+                    await PollAsync();
+                }
+            }
+            catch (OperationCanceledException) { }
+        });
+    }
+
+    private async Task PollAsync()
+    {
+        try
+        {
+            if (!_permissionRequested)
+            {
+                try
+                {
+                    await JS.InvokeVoidAsync("workAgentsNotifications.ensurePermission");
+                    _permissionRequested = true;
+                }
+                catch
+                {
+                    // ignore(JS 未読込時など)。
+                }
+            }
+
+            var pending = await ApprovalStore.ListPendingAsync();
+            foreach (var approval in pending)
+            {
+                if (!_knownApprovalIds.Add(approval.ApprovalId))
+                {
+                    continue;
+                }
+
+                var title = string.IsNullOrWhiteSpace(approval.Title) ? approval.Tool : approval.Title;
+                var body = string.IsNullOrWhiteSpace(approval.ArgsSummary)
+                    ? $"Run {ShortId(approval.RunId)} が承認待ちです"
+                    : approval.ArgsSummary;
+                try
+                {
+                    await JS.InvokeVoidAsync(
+                        "workAgentsNotifications.show",
+                        $"MeshGuild AI Studio 承認要求: {title}",
+                        body,
+                        approval.ApprovalId);
+                }
+                catch
+                {
+                    // ignore
+                }
+            }
+        }
+        catch
+        {
+            // ignore — 次の tick で再試行。
+        }
+    }
+
+    private static string ShortId(string value)
+        => value.Length > 10 ? $"{value[..10]}..." : value;
+
+    public async ValueTask DisposeAsync()
+    {
+        _cts?.Cancel();
+        _timer?.Dispose();
+        await Task.CompletedTask;
+    }
+}

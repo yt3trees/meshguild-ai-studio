@@ -1,0 +1,7 @@
+kind: Prompt
+name: dev-agent
+displayName: Development Agent
+description: Implements the requested change within the assigned workspace.
+harness:
+  shell: false
+  fileStore: artifacts

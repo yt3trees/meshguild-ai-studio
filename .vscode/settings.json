@@ -1,0 +1,9 @@
+{
+  "yaml.schemas": {
+    "./schemas/graph.schema.json": "**/graphs/*/graph.yaml",
+    "./schemas/team.schema.json": "**/teams/*/team.yaml",
+    "./schemas/agent.schema.json": "**/agents/*/agent.yaml",
+    "./schemas/workspace.schema.json": "**/agents/*/workspace.yaml",
+    "./schemas/workflow.schema.json": "**/workflows/*/workflow.yaml"
+  }
+}

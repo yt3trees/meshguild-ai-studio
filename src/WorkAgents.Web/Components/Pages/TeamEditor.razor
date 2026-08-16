@@ -1,0 +1,503 @@
+@page "/teams-agents/{TeamName}/edit"
+@using WorkAgents.Core.Authoring
+@using WorkAgents.Core.Missions
+@using WorkAgents.Core.Teams
+@inject DefinitionAuthoringService Authoring
+@inject NavigationManager Navigation
+
+<PageTitle>MeshGuild AI Studio | チーム編集</PageTitle>
+
+@if (original is null)
+{
+    <div class="wa-scroll-page">
+        <div class="wa-inner">
+            <div class="wa-head"><div><h1>チーム編集</h1><p><a class="wa-back-link" href="teams-agents">← 一覧へ戻る</a></p></div></div>
+            <div class="wa-panel"><div class="wa-empty">チーム「@TeamName」は見つかりませんでした。</div></div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="wa-scroll-page">
+        <div class="wa-inner">
+            <div class="wa-head">
+                <div>
+                    <p><a class="wa-back-link" href="teams-agents/@TeamName">← 詳細へ戻る</a></p>
+                    <h1>@(string.IsNullOrWhiteSpace(displayName) ? name : displayName)</h1>
+                    <p>編成と会話の許可をフォームで編集します。参照先はすべて既存の定義から選びます。</p>
+                </div>
+                <div class="wa-head-actions">
+                    @if (isDirty)
+                    {
+                        <span class="wa-tag wa-tag-warn" data-pw="team-dirty">未保存の変更</span>
+                    }
+                    <button class="wa-btn wa-btn-sm" type="button" @onclick="Validate" data-pw="team-validate">検証</button>
+                    <button class="wa-btn wa-btn-primary wa-btn-sm" type="button" @onclick="SaveAsync" disabled="@(!isDirty || isSaving)" data-pw="team-save">
+                        @(isSaving ? "保存中…" : "保存")
+                    </button>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(savedMessage))
+            {
+                <div class="wa-note wa-note-accent" data-pw="team-saved">@savedMessage</div>
+            }
+
+            <div class="wa-editor-grid">
+                <div class="wa-editor-main">
+                    <section class="wa-panel wa-mb">
+                        <div class="wa-panel-header"><span>基本</span></div>
+                        @foreach (var field in BasicFields)
+                        {
+                            <SchemaField Field="field" Value="@BasicValue(field.Name)"
+                                         ValueChanged="@(value => SetBasicValue(field.Name, value))" />
+                        }
+                    </section>
+
+                    <section class="wa-panel wa-mb">
+                        <div class="wa-panel-header"><span>編成</span><span class="wa-panel-sub">統括 1 名 + メンバー @members.Count 名</span></div>
+
+                        @if (OrchestratorAgentField is not null)
+                        {
+                            <SchemaField Field="OrchestratorAgentField" Value="@orchestrator.Agent"
+                                         ValueChanged="@(value => { orchestrator = orchestrator with { Agent = value ?? string.Empty }; MarkDirty(); })"
+                                         Options="referenceOptions" />
+                        }
+                        @if (OrchestratorInstancesField is not null)
+                        {
+                            <SchemaField Field="OrchestratorInstancesField" Value="@orchestrator.MaxInstances.ToString()"
+                                         ValueChanged="@(value => { orchestrator = orchestrator with { MaxInstances = ParseInt(value) ?? 1 }; MarkDirty(); })" />
+                        }
+
+                        <div class="wa-subsection">
+                            <div class="wa-subsection-head">メンバー</div>
+                            @if (members.Count == 0)
+                            {
+                                <div class="wa-empty">メンバーが 1 人もいません。最低 1 名必要です。</div>
+                            }
+                            @foreach (var member in members.ToArray())
+                            {
+                                var captured = member;
+                                <div class="wa-row-card wa-row-card-stack" data-pw="member-card">
+                                    <div class="wa-edge-card-head">
+                                        <span class="wa-tag">@(string.IsNullOrWhiteSpace(captured.Role) ? "メンバー" : captured.Role)</span>
+                                        <button type="button" class="wa-btn wa-btn-sm wa-btn-danger" @onclick="() => RemoveMember(captured)">削除</button>
+                                    </div>
+                                    @foreach (var field in MemberFields)
+                                    {
+                                        <SchemaField Field="field" Value="@MemberValue(captured, field.Name)"
+                                                     ValueChanged="@(value => SetMemberValue(captured, field.Name, value))"
+                                                     Options="referenceOptions" />
+                                    }
+                                </div>
+                            }
+                            <button type="button" class="wa-btn wa-btn-sm" @onclick="AddMember" data-pw="team-add-member">+ メンバーを追加</button>
+                        </div>
+                    </section>
+
+                    <section class="wa-panel wa-mb">
+                        <div class="wa-panel-header"><span>会話</span></div>
+                        @if (ChannelsDefaultField is not null)
+                        {
+                            <SchemaField Field="ChannelsDefaultField" Value="@ChannelDefaultText"
+                                         ValueChanged="SetChannelsDefault" />
+                        }
+
+                        <div class="wa-subsection">
+                            <div class="wa-subsection-head">直接会話を許可する経路</div>
+                            <p class="wa-field-help">既定の経路に対する例外です。ここに書いた組み合わせだけが直接やり取りできます。</p>
+                            @foreach (var rule in channels.ToArray())
+                            {
+                                var captured = rule;
+                                <div class="wa-row-card wa-row-card-stack" data-pw="channel-card">
+                                    <div class="wa-edge-card-head">
+                                        <span class="wa-tag">@captured.From → @captured.To</span>
+                                        <button type="button" class="wa-btn wa-btn-sm wa-btn-danger" @onclick="() => RemoveChannel(captured)">削除</button>
+                                    </div>
+                                    @if (ChannelFromField is not null)
+                                    {
+                                        <SchemaField Field="ChannelFromField" Value="@captured.From"
+                                                     ValueChanged="@(value => SetChannel(captured, from: value))"
+                                                     Options="referenceOptions" />
+                                    }
+                                    @if (ChannelToField is not null)
+                                    {
+                                        <SchemaField Field="ChannelToField" Value="@captured.To"
+                                                     ValueChanged="@(value => SetChannel(captured, to: value))"
+                                                     Options="referenceOptions" />
+                                    }
+                                    <div class="wa-field">
+                                        <label><span>kinds</span></label>
+                                        <p class="wa-field-help">この経路で許可するメッセージ種別です。</p>
+                                        <div class="wa-checkbox-row">
+                                            @foreach (var kind in SelectableKinds)
+                                            {
+                                                var capturedKind = kind;
+                                                <label class="wa-checkbox">
+                                                    <input type="checkbox" checked="@captured.Kinds.Contains(capturedKind)"
+                                                           @onchange="args => ToggleKind(captured, capturedKind, args)" />
+                                                    <span>@KindLabel(capturedKind)</span>
+                                                </label>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                            <button type="button" class="wa-btn wa-btn-sm" @onclick="AddChannel" disabled="@(members.Count == 0)" data-pw="team-add-channel">+ 経路を追加</button>
+                        </div>
+                    </section>
+
+                    <section class="wa-panel wa-mb">
+                        <div class="wa-panel-header"><span>上限</span></div>
+                        @foreach (var field in LimitFields)
+                        {
+                            <SchemaField Field="field" Value="@LimitValue(field.Name)"
+                                         ValueChanged="@(value => SetLimitValue(field.Name, value))" />
+                        }
+                    </section>
+
+                    <section class="wa-panel wa-mb">
+                        <div class="wa-panel-header"><span>評価</span></div>
+                        @if (EvaluatorField is not null)
+                        {
+                            <SchemaField Field="EvaluatorField" Value="@evaluator"
+                                         ValueChanged="@(value => { evaluator = value; MarkDirty(); })"
+                                         Options="referenceOptions" />
+                        }
+                        @if (ScoreThresholdField is not null)
+                        {
+                            <SchemaField Field="ScoreThresholdField"
+                                         Value="@scoreThreshold?.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                         ValueChanged="@(value => { scoreThreshold = ParseDouble(value); MarkDirty(); })" />
+                        }
+                    </section>
+                </div>
+
+                <div class="wa-editor-side">
+                    <NarrationPanel Title="このチームはこう動きます"
+                                    Headline="@DefinitionNarrator.Headline(WorkingTeam)"
+                                    Lines="@narration" />
+
+                    <DiagnosticList Diagnostics="diagnostics"
+                                    ValidMessage="このチームは検証を通りました。"
+                                    IdleMessage="検証を押すと、参照切れや上限の矛盾を確認できます。" />
+
+                    <section class="wa-panel wa-mt">
+                        <div class="wa-panel-header"><span>team.yaml</span></div>
+                        <p class="wa-field-help">保存するとこの内容が書き出されます。コメントは保持されません。</p>
+                        <pre class="wa-yaml" data-pw="team-yaml">@Authoring.ToYaml(WorkingTeam)</pre>
+                    </section>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string? TeamName { get; set; }
+
+    private static UiSchemaDocument Schema => UiSchemaCatalog.Get("team");
+
+    private TeamDefinition? original;
+    private string name = string.Empty;
+    private string? displayName;
+    private string? description;
+    private TeamOrchestrator orchestrator = new() { Agent = string.Empty };
+    private List<TeamMember> members = new();
+    private ChannelDefault channelsDefault = ChannelDefault.ViaOrchestrator;
+    private List<ChannelRule> channels = new();
+    private TeamLimits limits = new();
+    private string? evaluator;
+    private double? scoreThreshold;
+
+    private bool isDirty;
+    private bool isSaving;
+    private string? savedMessage;
+    private IReadOnlyList<AuthoringDiagnostic>? diagnostics;
+    private IReadOnlyList<NarrationLine> narration = Array.Empty<NarrationLine>();
+    private ReferenceOptions referenceOptions = ReferenceOptions.Empty;
+
+    private static readonly MessageKind[] SelectableKinds = [MessageKind.Question, MessageKind.Answer, MessageKind.Share];
+
+    private static IReadOnlyList<UiField> BasicFields => Schema.FieldsInGroup("基本");
+    private static IReadOnlyList<UiField> LimitFields => Schema.Field("limits")?.Fields.OrderBy(f => f.Order).ToArray() ?? [];
+    private static IReadOnlyList<UiField> MemberFields => Schema.Field("members")?.Item?.Fields.OrderBy(f => f.Order).ToArray() ?? [];
+    private static UiField? OrchestratorAgentField => Schema.Field("orchestrator")?.Field("agent");
+    private static UiField? OrchestratorInstancesField => Schema.Field("orchestrator")?.Field("maxInstances");
+    private static UiField? ChannelsDefaultField => Schema.Field("channels")?.Field("default");
+    private static UiField? ChannelFromField => Schema.Field("channels")?.Field("allow")?.Item?.Field("from");
+    private static UiField? ChannelToField => Schema.Field("channels")?.Field("allow")?.Item?.Field("to");
+    private static UiField? EvaluatorField => Schema.Field("evaluation")?.Field("evaluator");
+    private static UiField? ScoreThresholdField => Schema.Field("evaluation")?.Field("scoreThreshold");
+
+    protected override void OnParametersSet()
+    {
+        Load(TeamName is null ? null : Authoring.FindTeam(TeamName));
+    }
+
+    private void Load(TeamDefinition? team)
+    {
+        original = team;
+        if (team is null)
+        {
+            return;
+        }
+        name = team.Name;
+        displayName = team.DisplayName;
+        description = team.Description;
+        orchestrator = team.Orchestrator;
+        members = team.Members.ToList();
+        channelsDefault = team.ChannelsDefault;
+        channels = team.ChannelsAllow.ToList();
+        limits = team.Limits;
+        evaluator = team.Evaluation?.Evaluator;
+        scoreThreshold = team.Evaluation?.ScoreThreshold;
+        isDirty = false;
+        diagnostics = null;
+        savedMessage = null;
+        Refresh();
+    }
+
+    private TeamDefinition WorkingTeam => (original ?? new TeamDefinition
+    {
+        Name = name,
+        Orchestrator = orchestrator,
+        Members = members,
+    }) with
+    {
+        Name = name,
+        DisplayName = displayName,
+        Description = description,
+        Orchestrator = orchestrator,
+        Members = members,
+        ChannelsDefault = channelsDefault,
+        ChannelsAllow = channels,
+        Limits = limits,
+        Evaluation = HasEvaluation
+            ? new TeamEvaluationDefaults { Evaluator = evaluator, ScoreThreshold = scoreThreshold }
+            : null,
+    };
+
+    private bool HasEvaluation => !string.IsNullOrWhiteSpace(evaluator) || scoreThreshold.HasValue;
+
+    private void MarkDirty()
+    {
+        isDirty = true;
+        savedMessage = null;
+        Refresh();
+    }
+
+    private void Refresh()
+    {
+        var working = WorkingTeam;
+        referenceOptions = Authoring.BuildReferenceOptions(team: working);
+        narration = DefinitionNarrator.Describe(working);
+    }
+
+    // ------------------------------------------------------------------ 基本
+
+    private string? BasicValue(string fieldName) => fieldName switch
+    {
+        "name" => name,
+        "displayName" => displayName,
+        "description" => description,
+        _ => null,
+    };
+
+    private void SetBasicValue(string fieldName, string? value)
+    {
+        switch (fieldName)
+        {
+            case "name": name = value?.Trim() ?? string.Empty; break;
+            case "displayName": displayName = value; break;
+            case "description": description = value; break;
+            default: return;
+        }
+        MarkDirty();
+    }
+
+    // ---------------------------------------------------------------- メンバー
+
+    private static string? MemberValue(TeamMember member, string fieldName) => fieldName switch
+    {
+        "agent" => member.Agent,
+        "role" => member.Role,
+        "scope" => member.Scope,
+        "maxInstances" => member.MaxInstances.ToString(),
+        _ => null,
+    };
+
+    private void SetMemberValue(TeamMember member, string fieldName, string? value)
+    {
+        var index = members.IndexOf(member);
+        if (index < 0)
+        {
+            return;
+        }
+        members[index] = fieldName switch
+        {
+            "agent" => member with { Agent = value ?? string.Empty },
+            "role" => member with { Role = value },
+            "scope" => member with { Scope = value },
+            "maxInstances" => member with { MaxInstances = ParseInt(value) ?? 1 },
+            _ => member,
+        };
+        MarkDirty();
+    }
+
+    private void AddMember()
+    {
+        // まだチームにいないエージェントを既定で選んでおく。重複はローダーが弾くため。
+        var used = new HashSet<string>(members.Select(member => member.Agent).Append(orchestrator.Agent), StringComparer.OrdinalIgnoreCase);
+        var candidate = Authoring.Agents.FirstOrDefault(agent => !used.Contains(agent.Name));
+        members.Add(new TeamMember { Agent = candidate?.Name ?? string.Empty });
+        MarkDirty();
+    }
+
+    private void RemoveMember(TeamMember member)
+    {
+        members.Remove(member);
+        // チームから外れたエージェントを指す経路は残せない。
+        channels.RemoveAll(rule =>
+            string.Equals(rule.From, member.Agent, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(rule.To, member.Agent, StringComparison.OrdinalIgnoreCase));
+        MarkDirty();
+    }
+
+    // ------------------------------------------------------------------ 会話
+
+    private string ChannelDefaultText => channelsDefault == ChannelDefault.Direct ? "direct" : "via-orchestrator";
+
+    private void SetChannelsDefault(string? value)
+    {
+        channelsDefault = string.Equals(value, "direct", StringComparison.Ordinal)
+            ? ChannelDefault.Direct
+            : ChannelDefault.ViaOrchestrator;
+        MarkDirty();
+    }
+
+    private void AddChannel()
+    {
+        var from = members.FirstOrDefault()?.Agent ?? orchestrator.Agent;
+        var to = members.Skip(1).FirstOrDefault()?.Agent ?? orchestrator.Agent;
+        channels.Add(new ChannelRule { From = from, To = to, Kinds = [MessageKind.Question, MessageKind.Answer] });
+        MarkDirty();
+    }
+
+    private void RemoveChannel(ChannelRule rule)
+    {
+        channels.Remove(rule);
+        MarkDirty();
+    }
+
+    private void SetChannel(ChannelRule rule, string? from = null, string? to = null)
+    {
+        var index = channels.IndexOf(rule);
+        if (index < 0)
+        {
+            return;
+        }
+        channels[index] = rule with
+        {
+            From = from ?? rule.From,
+            To = to ?? rule.To,
+        };
+        MarkDirty();
+    }
+
+    private void ToggleKind(ChannelRule rule, MessageKind kind, ChangeEventArgs args)
+    {
+        var index = channels.IndexOf(rule);
+        if (index < 0)
+        {
+            return;
+        }
+        var enabled = args.Value is bool boolean && boolean;
+        var kinds = rule.Kinds.ToList();
+        if (enabled && !kinds.Contains(kind))
+        {
+            kinds.Add(kind);
+        }
+        else if (!enabled)
+        {
+            kinds.Remove(kind);
+        }
+        channels[index] = rule with { Kinds = kinds };
+        MarkDirty();
+    }
+
+    private static string KindLabel(MessageKind kind) => kind switch
+    {
+        MessageKind.Question => "question (質問)",
+        MessageKind.Answer => "answer (回答)",
+        MessageKind.Share => "share (共有)",
+        _ => kind.ToString(),
+    };
+
+    // ------------------------------------------------------------------ 上限
+
+    private string? LimitValue(string fieldName) => fieldName switch
+    {
+        "maxDelegationDepth" => limits.MaxDelegationDepth.ToString(),
+        "maxParallelInstances" => limits.MaxParallelInstances.ToString(),
+        "noProgressRoundTrips" => limits.NoProgressRoundTrips.ToString(),
+        "askTimeoutSeconds" => limits.AskTimeoutSeconds.ToString(),
+        _ => null,
+    };
+
+    private void SetLimitValue(string fieldName, string? value)
+    {
+        var parsed = ParseInt(value);
+        limits = fieldName switch
+        {
+            "maxDelegationDepth" => limits with { MaxDelegationDepth = parsed ?? 3 },
+            "maxParallelInstances" => limits with { MaxParallelInstances = parsed ?? 6 },
+            "noProgressRoundTrips" => limits with { NoProgressRoundTrips = parsed ?? 5 },
+            "askTimeoutSeconds" => limits with { AskTimeoutSeconds = parsed ?? 300 },
+            _ => limits,
+        };
+        MarkDirty();
+    }
+
+    // ---------------------------------------------------------- 検証 / 保存
+
+    private void Validate()
+    {
+        diagnostics = Authoring.ValidateTeam(WorkingTeam);
+        Refresh();
+    }
+
+    private async Task SaveAsync()
+    {
+        isSaving = true;
+        try
+        {
+            var savedName = name;
+            var result = await Authoring.SaveTeamAsync(WorkingTeam);
+            diagnostics = result.Diagnostics;
+            if (result.Saved)
+            {
+                Load(Authoring.FindTeam(savedName) ?? WorkingTeam);
+                savedMessage = $"{result.Path} に保存しました。実行への反映はアプリの再起動後です。";
+                if (!string.Equals(savedName, TeamName, StringComparison.Ordinal))
+                {
+                    Navigation.NavigateTo($"teams-agents/{savedName}/edit");
+                }
+            }
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private static int? ParseInt(string? value)
+        => int.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var result)
+            ? result
+            : null;
+
+    private static double? ParseDouble(string? value)
+        => double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var result)
+            ? result
+            : null;
+}

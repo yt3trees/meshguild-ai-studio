@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WorkAgents workspace.yaml",
+  "description": "エージェントの作業FS/shell ポリシー。未指定項目は ProfileOptions と既定 denylist で補完される。",
+  "type": "object",
+  "additionalProperties": false,
+  "x-ui": { "groups": ["ファイル", "シェル"] },
+  "properties": {
+    "fileStore": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "エージェントの作業ファイルストアに関する設定。",
+      "x-ui": { "group": "ファイル", "order": 1 },
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["workspace", "artifacts"],
+          "description": "ファイルストアの用途。実質的にシェル作業へ使えるのは workspace のみ。",
+          "x-ui": {
+            "order": 1,
+            "widget": "select",
+            "enumLabels": { "workspace": "workspace (作業用 FS。シェル作業向け)", "artifacts": "artifacts (成果物の置き場のみ)" }
+          }
+        },
+        "root": {
+          "type": "string",
+          "description": "FileStore 親ルート。未設定時は ProfileOptions.WorkspaceRoot。",
+          "x-ui": { "order": 2, "widget": "text", "defaultHint": "ProfileOptions.WorkspaceRoot" }
+        }
+      }
+    },
+    "shell": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "シェル実行の作業ディレクトリ、許可・拒否パターン、リソース上限。",
+      "x-ui": { "group": "シェル", "order": 2 },
+      "properties": {
+        "confineWorkingDirectory": {
+          "type": "boolean",
+          "description": "作業ディレクトリの外へのアクセスを制限するか。省略時は true。",
+          "x-ui": { "order": 1, "widget": "switch", "defaultHint": "true" }
+        },
+        "denyList": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "拒否コマンドの正規表現リスト。既定 denylist に追加される。",
+          "x-ui": { "order": 2, "widget": "list", "itemLabel": "拒否パターン", "placeholder": "^rm\\s+-rf" }
+        },
+        "allowList": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "追加で許可するコマンドの正規表現リスト。省略時は空。",
+          "x-ui": { "order": 3, "widget": "list", "itemLabel": "許可パターン", "defaultHint": "追加許可なし" }
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "1 回のシェル実行に許容する最大秒数。",
+          "x-ui": { "order": 4, "widget": "number", "unit": "秒" }
+        },
+        "maxOutputBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "1 回のシェル実行で受け取る出力の最大バイト数。既定は 131072。",
+          "x-ui": { "order": 5, "widget": "number", "defaultHint": "131072", "unit": "バイト" }
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["Stateless", "Persistent"],
+          "description": "既定は SDK 任せ (未指定)。",
+          "x-ui": {
+            "order": 6,
+            "widget": "select",
+            "defaultHint": "SDK 任せ",
+            "advanced": true,
+            "enumLabels": { "Stateless": "Stateless (1 回ごとに状態を捨てる)", "Persistent": "Persistent (セッションを保つ)" }
+          }
+        }
+      }
+    }
+  }
+}

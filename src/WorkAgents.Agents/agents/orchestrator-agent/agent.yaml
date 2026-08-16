@@ -1,0 +1,7 @@
+kind: Prompt
+name: orchestrator-agent
+displayName: Orchestrator Agent
+description: Coordinates a bounded team mission and records decisions.
+harness:
+  shell: false
+  fileStore: artifacts

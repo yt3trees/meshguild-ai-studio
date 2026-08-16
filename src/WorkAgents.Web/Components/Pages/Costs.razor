@@ -1,0 +1,155 @@
+@page "/costs"
+@implements IAsyncDisposable
+@using WorkAgents.Core
+@using WorkAgents.Core.Abstractions
+@inject ICostStore CostStore
+
+<PageTitle>MeshGuild AI Studio | Costs</PageTitle>
+
+<div class="costs-page">
+    <div class="costs-inner">
+        <div class="costs-heading">
+            <div>
+                <h1>Costs</h1>
+                <p>Agent呼び出しごとのトークン使用量(直近30日分)</p>
+            </div>
+        </div>
+
+        @if (loadError is not null)
+        {
+            <div class="load-error" role="alert">@loadError</div>
+        }
+
+        <div class="stat-grid">
+            <div class="stat-card">
+                <div class="stat-label">Tokens today</div>
+                <div class="stat-value">@FormatTokens(TokensToday)</div>
+                <div class="stat-note">@CallsToday calls</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Tokens this week</div>
+                <div class="stat-value">@FormatTokens(TokensThisWeek)</div>
+                <div class="stat-note">@CallsThisWeek calls</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Recorded (30d)</div>
+                <div class="stat-value">@records.Count</div>
+                <div class="stat-note">calls · budget alerts not yet implemented</div>
+            </div>
+        </div>
+
+        <section class="panel">
+            <div class="panel-header">
+                <span>By agent</span>
+                <span class="panel-header-sub">直近30日 · 合計トークン降順</span>
+            </div>
+            @if (byAgent.Count == 0)
+            {
+                <div class="costs-empty">記録されたコストはまだありません。</div>
+            }
+            else
+            {
+                <div class="agent-header-row">
+                    <span>Agent</span><span>Calls</span><span>Tokens</span>
+                </div>
+                @foreach (var agent in byAgent)
+                {
+                    <div class="agent-row">
+                        <span class="agent-name">@agent.AgentName</span>
+                        <span class="agent-calls">@agent.Calls</span>
+                        <span class="agent-tokens">@FormatTokens(agent.TotalTokens)</span>
+                    </div>
+                }
+            }
+        </section>
+
+        <section class="panel recent-panel">
+            <div class="panel-header">
+                <span>Recent calls</span>
+                <span class="panel-header-sub">refresh 10s</span>
+            </div>
+            @if (records.Count == 0)
+            {
+                <div class="costs-empty">まだ呼び出しはありません。</div>
+            }
+            else
+            {
+                <div class="recent-header-row">
+                    <span>Agent</span><span>Model</span><span>Tokens</span><span>Time</span>
+                </div>
+                @foreach (var record in records.OrderByDescending(r => r.CreatedAt).Take(20))
+                {
+                    <div class="recent-row">
+                        <span class="agent-name">@record.AgentName</span>
+                        <span class="model-name">@(record.ModelName ?? "—") <small>@record.Provider</small></span>
+                        <span class="agent-tokens">@FormatTokens(record.TotalTokens ?? 0)</span>
+                        <span class="recent-time">@record.CreatedAt.ToLocalTime().ToString("MM/dd HH:mm")</span>
+                    </div>
+                }
+            }
+        </section>
+    </div>
+</div>
+
+@code {
+    private readonly CancellationTokenSource refreshCancellation = new();
+    private IReadOnlyList<CostRecord> records = Array.Empty<CostRecord>();
+    private string? loadError;
+
+    private long TokensToday => records
+        .Where(r => r.CreatedAt.ToLocalTime().Date == DateTimeOffset.Now.Date)
+        .Sum(r => r.TotalTokens ?? 0);
+    private int CallsToday => records.Count(r => r.CreatedAt.ToLocalTime().Date == DateTimeOffset.Now.Date);
+    private long TokensThisWeek => records.Sum(r => r.TotalTokens ?? 0);
+    private int CallsThisWeek => records.Count;
+
+    private IReadOnlyList<(string AgentName, int Calls, long TotalTokens)> byAgent => records
+        .GroupBy(r => r.AgentName)
+        .Select(g => (AgentName: g.Key, Calls: g.Count(), TotalTokens: g.Sum(r => r.TotalTokens ?? 0)))
+        .OrderByDescending(a => a.TotalTokens)
+        .ToArray();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync(refreshCancellation.Token);
+        _ = RefreshLoopAsync(refreshCancellation.Token);
+    }
+
+    private async Task RefreshLoopAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                await LoadAsync(cancellationToken);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    private async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            records = await CostStore.ListAsync(DateTimeOffset.UtcNow.AddDays(-30), cancellationToken);
+            loadError = null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            loadError = "コストデータを読み込めませんでした。";
+        }
+    }
+
+    private static string FormatTokens(long tokens) => tokens.ToString("N0");
+
+    public ValueTask DisposeAsync()
+    {
+        refreshCancellation.Cancel();
+        refreshCancellation.Dispose();
+        return ValueTask.CompletedTask;
+    }
+}

@@ -1,0 +1,198 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WorkAgents team.yaml",
+  "description": "エージェントの集まりを 1 チームとして扱うための定義。参照: specs/001-multi-agent-orchestration/contracts/team-yaml.md",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "name", "orchestrator", "members"],
+  "x-ui": { "groups": ["基本", "編成", "会話", "上限", "評価"] },
+  "properties": {
+    "version": {
+      "const": 1,
+      "description": "チーム定義の契約バージョン。現在は 1 のみ。",
+      "x-ui": { "group": "基本", "order": 0, "widget": "hidden" }
+    },
+    "name": {
+      "type": "string",
+      "description": "チーム名。フォルダー名 (teams/<name>) と一致させること。",
+      "x-ui": { "group": "基本", "order": 1, "widget": "text", "placeholder": "review-team" }
+    },
+    "displayName": {
+      "type": "string",
+      "description": "画面に表示するチーム名。省略時は name を使う。",
+      "x-ui": { "group": "基本", "order": 2, "widget": "text", "defaultHint": "name と同じ" }
+    },
+    "description": {
+      "type": "string",
+      "description": "チームの目的や担当範囲の説明。",
+      "x-ui": { "group": "基本", "order": 3, "widget": "textarea", "placeholder": "変更内容をレビューして指摘をまとめる" }
+    },
+    "orchestrator": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "チーム全体の分解、委譲、進行管理を担う統括エージェント。",
+      "required": ["agent"],
+      "x-ui": { "group": "編成", "order": 10 },
+      "properties": {
+        "agent": {
+          "type": "string",
+          "description": "統括を担うエージェント名。",
+          "x-source": "agents",
+          "x-ui": { "order": 1, "widget": "select" }
+        },
+        "maxInstances": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "統括エージェントの同時起動数。省略時は 1。",
+          "x-ui": { "order": 2, "widget": "number", "defaultHint": "1", "advanced": true }
+        }
+      }
+    },
+    "members": {
+      "type": "array",
+      "minItems": 1,
+      "description": "統括以外のサブエージェント編成。1 件以上必要。",
+      "x-ui": { "group": "編成", "order": 11, "widget": "table", "itemLabel": "メンバー" },
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["agent"],
+        "properties": {
+          "agent": {
+            "type": "string",
+            "description": "参照するエージェント名。agents/<name> の定義に対応する。",
+            "x-source": "agents",
+            "x-ui": { "order": 1, "widget": "select" }
+          },
+          "role": {
+            "type": "string",
+            "description": "このチーム内での役割の表示名。エージェント定義自体のプロンプトや動作は変更しない。",
+            "x-ui": { "order": 2, "widget": "text", "placeholder": "実装担当" }
+          },
+          "scope": {
+            "type": "string",
+            "description": "このメンバーの担当範囲を示す補足メタデータ。",
+            "x-ui": { "order": 3, "widget": "text", "placeholder": "src/ 配下" }
+          },
+          "maxInstances": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "このメンバーの同時起動数上限。省略時は 1。チーム全体の maxParallelInstances も適用される。",
+            "x-ui": { "order": 4, "widget": "number", "defaultHint": "1", "advanced": true }
+          }
+        }
+      }
+    },
+    "channels": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "会話経路。既定は via-orchestrator (すべて統括経由)。",
+      "x-ui": { "group": "会話", "order": 20 },
+      "properties": {
+        "default": {
+          "type": "string",
+          "enum": ["via-orchestrator", "direct"],
+          "description": "メンバー間の直接会話の既定経路。via-orchestrator は統括経由、direct は直接会話。省略時は via-orchestrator。",
+          "x-ui": {
+            "order": 1,
+            "widget": "select",
+            "defaultHint": "via-orchestrator",
+            "enumLabels": {
+              "via-orchestrator": "via-orchestrator (すべて統括を経由する)",
+              "direct": "direct (メンバー同士が直接会話できる)"
+            }
+          }
+        },
+        "allow": {
+          "type": "array",
+          "description": "直接会話してよい組み合わせ。",
+          "x-ui": { "order": 2, "widget": "table", "itemLabel": "許可する経路" },
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["from", "to"],
+            "properties": {
+              "from": {
+                "type": "string",
+                "description": "送信元エージェント名。チーム内のエージェントを指定する。",
+                "x-source": "team-agents",
+                "x-ui": { "order": 1, "widget": "select" }
+              },
+              "to": {
+                "type": "string",
+                "description": "送信先エージェント名。チーム内のエージェントを指定する。",
+                "x-source": "team-agents",
+                "x-ui": { "order": 2, "widget": "select" }
+              },
+              "kinds": {
+                "type": "array",
+                "description": "この経路で許可するメッセージ種別。省略時は空。",
+                "x-ui": { "order": 3, "widget": "multiselect", "defaultHint": "指定なし" },
+                "items": {
+                  "type": "string",
+                  "enum": ["question", "answer", "share"],
+                  "description": "質問、回答、共有のいずれか。",
+                  "x-ui": { "enumLabels": { "question": "question (質問)", "answer": "answer (回答)", "share": "share (共有)" } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "ガードレール。",
+      "x-ui": { "group": "上限", "order": 30 },
+      "properties": {
+        "maxDelegationDepth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "description": "委譲を入れ子にできる最大深さ。省略時は 3。",
+          "x-ui": { "order": 1, "widget": "number", "defaultHint": "3" }
+        },
+        "maxParallelInstances": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "チーム内で同時に稼働できるエージェント数の上限。省略時は 6。",
+          "x-ui": { "order": 2, "widget": "number", "defaultHint": "6" }
+        },
+        "noProgressRoundTrips": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "進展のない会話を許容する連続往復数。超過時に実行を停止する。省略時は 5。",
+          "x-ui": { "order": 3, "widget": "number", "defaultHint": "5" }
+        },
+        "askTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "質問への応答を待つ最大秒数。省略時は 300 秒。",
+          "x-ui": { "order": 4, "widget": "number", "defaultHint": "300", "unit": "秒" }
+        }
+      }
+    },
+    "evaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "ループ実行などで使う既定の評価設定。",
+      "x-ui": { "group": "評価", "order": 40 },
+      "properties": {
+        "evaluator": {
+          "type": "string",
+          "description": "評価を担当するエージェント名。省略時は決定的な評価のみ行う。",
+          "x-source": "agents",
+          "x-ui": { "order": 1, "widget": "select", "defaultHint": "決定的な評価のみ" }
+        },
+        "scoreThreshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "評価スコアがこの値以上になったら停止する。0.0 以上 1.0 以下。",
+          "x-ui": { "order": 2, "widget": "number", "step": 0.05, "placeholder": "0.8" }
+        }
+      }
+    }
+  }
+}

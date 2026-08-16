@@ -1,0 +1,83 @@
+﻿version: 1
+name: "demo-graph"
+displayName: "Demo Graph"
+description: "A validation graph with branch, parallel, join, and explicit loop back."
+nodes:
+  - id: "start"
+    kind: agent
+    agent: "repo-agent"
+    input: "${mission.goal}"
+  - id: "route"
+    kind: branch
+  - id: "parallel"
+    kind: parallel
+  - id: "lint"
+    kind: code
+    codeFile: "scripts/lint.csx"
+  - id: "doc"
+    kind: code
+    codeFile: "scripts/doc.csx"
+  - id: "join"
+    kind: join
+    joinPolicy: all
+    onPartialFailure: continue
+  - id: "verify"
+    kind: loop
+    agent: "repo-agent"
+    body: "subgraph"
+    stop:
+      maxIterations: 2
+      scoreThreshold: 0.9
+  - id: "fallback"
+    kind: code
+    codeFile: "scripts/fallback.csx"
+  - id: "done"
+    kind: code
+    codeFile: "scripts/done.csx"
+edges:
+  - id: "start-to-route"
+    from: "start"
+    to: "route"
+  - id: "route-to-parallel"
+    from: "route"
+    to: "parallel"
+  - id: "route-to-fallback"
+    from: "route"
+    to: "fallback"
+    condition: "${mission.id} == 'never'"
+  - id: "parallel-to-lint"
+    from: "parallel"
+    to: "lint"
+  - id: "parallel-to-doc"
+    from: "parallel"
+    to: "doc"
+  - id: "lint-to-join"
+    from: "lint"
+    to: "join"
+  - id: "doc-to-join"
+    from: "doc"
+    to: "join"
+  - id: "join-to-verify"
+    from: "join"
+    to: "verify"
+  - id: "verify-to-done"
+    from: "verify"
+    to: "done"
+  - id: "fallback-to-done"
+    from: "fallback"
+    to: "done"
+  - id: "verify-to-route"
+    from: "verify"
+    to: "route"
+    loopBack: true
+subgraphs:
+  subgraph:
+    nodes:
+      - id: "start"
+        kind: agent
+      - id: "node"
+        kind: branch
+    edges:
+      - id: "start-to-node"
+        from: "start"
+        to: "node"

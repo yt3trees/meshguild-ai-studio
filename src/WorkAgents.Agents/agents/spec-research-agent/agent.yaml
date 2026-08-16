@@ -1,0 +1,7 @@
+kind: Prompt
+name: spec-research-agent
+displayName: Specification Research Agent
+description: Extracts requirements and expected behavior for a team mission.
+harness:
+  shell: false
+  fileStore: artifacts

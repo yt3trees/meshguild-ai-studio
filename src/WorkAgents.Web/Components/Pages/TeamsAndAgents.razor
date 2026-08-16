@@ -1,0 +1,292 @@
+@page "/teams-agents"
+@page "/teams-agents/{TeamName}"
+@using WorkAgents.Core.Missions
+@using WorkAgents.Core.Teams
+@using WorkAgents.Agents
+@inject DefinitionAuthoringService Authoring
+@inject IAgentRegistry AgentRegistry
+
+<PageTitle>MeshGuild AI Studio | Teams &amp; Agents</PageTitle>
+
+@if (TeamName is null)
+{
+    <div class="wa-scroll-page">
+        <div class="wa-inner">
+            <div class="wa-head">
+                <div><h1>Teams &amp; Agents</h1><p>チームを選択すると編成、会話の許可関係、割り当てモデルが表示されます</p></div>
+                <div class="wa-head-actions">
+                    <a class="wa-btn wa-btn-sm" href="definitions/new?kind=agent">New agent</a>
+                    <a class="wa-btn wa-btn-primary wa-btn-sm" href="definitions/new?kind=team">New team</a>
+                </div>
+            </div>
+
+            <section class="wa-panel" data-pw="team-list">
+                <div class="wa-panel-header">
+                    <span>チーム</span>
+                    <span class="wa-panel-sub">@Teams.Count 件</span>
+                </div>
+                @if (Teams.Count == 0)
+                {
+                    <div class="wa-empty">
+                        チーム定義はまだありません。
+                        <a class="wa-btn wa-btn-primary wa-btn-sm" href="definitions/new?kind=team">テンプレートから作る</a>
+                    </div>
+                }
+                else
+                {
+                    <div class="wa-list-toolbar">
+                        <input class="wa-input" type="search" placeholder="チーム名で検索"
+                               value="@teamSearch" @oninput="OnTeamSearchChanged" data-pw="team-search" />
+                    </div>
+                    @if (FilteredTeams.Count == 0)
+                    {
+                        <div class="wa-empty">「@teamSearch」に一致するチームはありません。</div>
+                    }
+                    else
+                    {
+                        <div class="wa-table-wrap">
+                            <table class="wa-table">
+                                <thead><tr><th>チーム</th><th>統括</th><th>サブエージェント</th><th>委譲深さ上限</th><th></th></tr></thead>
+                                <tbody>
+                                @foreach (var team in PagedTeams)
+                                {
+                                    <tr data-pw="team-list-item">
+                                        <td><a class="wa-cell-link" href="teams-agents/@team.Name">@(team.DisplayName ?? team.Name)</a></td>
+                                        <td class="wa-cell-dim"><span class="wa-avatar wa-agent-orch wa-inline-avatar">@Initials(team.Orchestrator.Agent)</span>@team.Orchestrator.Agent</td>
+                                        <td class="wa-cell-dim">@team.Members.Count 体</td>
+                                        <td class="wa-cell-dim">@team.Limits.MaxDelegationDepth</td>
+                                        <td class="wa-cell-action"><a class="wa-btn wa-btn-sm" href="teams-agents/@team.Name/edit" data-pw="team-edit-link">編集</a></td>
+                                    </tr>
+                                }
+                                </tbody>
+                            </table>
+                        </div>
+                        <Pager Page="teamPage" PageCount="TeamPageCount" PageChanged="@(page => teamPage = page)" />
+                    }
+                }
+            </section>
+
+            <section class="wa-panel wa-mt">
+                <div class="wa-panel-header">
+                    <span>エージェント</span>
+                    <span class="wa-panel-sub">@Agents.Count 体 · 使える共有スキルと権限を編集できます</span>
+                </div>
+                @if (Agents.Count == 0)
+                {
+                    <div class="wa-empty">
+                        エージェント定義はまだありません。
+                        <a class="wa-btn wa-btn-primary wa-btn-sm" href="definitions/new?kind=agent">エージェントを作る</a>
+                    </div>
+                }
+                else
+                {
+                    <div class="wa-list-toolbar">
+                        <input class="wa-input" type="search" placeholder="エージェント名・説明で検索"
+                               value="@agentSearch" @oninput="OnAgentSearchChanged" data-pw="agent-search" />
+                    </div>
+                    @if (FilteredAgents.Count == 0)
+                    {
+                        <div class="wa-empty">「@agentSearch」に一致するエージェントはありません。</div>
+                    }
+                    else
+                    {
+                        <div class="wa-table-wrap">
+                            <table class="wa-table" data-pw="agent-list">
+                                <thead><tr><th>エージェント</th><th>説明</th><th>所属チーム</th><th>共有スキル</th><th>権限</th><th></th></tr></thead>
+                                <tbody>
+                                @foreach (var agent in PagedAgents)
+                                {
+                                    <tr data-pw="agent-list-item">
+                                        <td><span class="wa-avatar @AgentClass(agent.Name) wa-inline-avatar">@Initials(agent.Name)</span>@agent.Name</td>
+                                        <td class="wa-cell-dim">@(string.IsNullOrWhiteSpace(agent.Description) ? "—" : agent.Description)</td>
+                                        <td class="wa-cell-dim">@TeamsSummary(agent.Name)</td>
+                                        <td class="wa-cell-dim">@SkillSummary(agent)</td>
+                                        <td class="wa-cell-dim">@HarnessSummary(agent)</td>
+                                        <td class="wa-cell-action"><a class="wa-btn wa-btn-sm" href="agents/@agent.Name/edit" data-pw="agent-edit-link">編集</a></td>
+                                    </tr>
+                                }
+                                </tbody>
+                            </table>
+                        </div>
+                        <Pager Page="agentPage" PageCount="AgentPageCount" PageChanged="@(page => agentPage = page)" />
+                    }
+                }
+            </section>
+        </div>
+    </div>
+}
+else if (selectedTeam is null)
+{
+    <div class="wa-scroll-page">
+        <div class="wa-inner">
+            <div class="wa-head"><div><h1>Teams &amp; Agents</h1><p><a class="wa-back-link" href="teams-agents">← 一覧へ戻る</a></p></div></div>
+            <div class="wa-panel"><div class="wa-empty">チーム「@TeamName」は見つかりませんでした。</div></div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="wa-scroll-page">
+        <div class="wa-inner">
+            <div class="wa-head">
+                <div><p><a class="wa-back-link" href="teams-agents">← 一覧</a></p><h1>@(selectedTeam.DisplayName ?? selectedTeam.Name)</h1><p>編成、会話の許可関係、割り当てモデル</p></div>
+                <div class="wa-head-actions">
+                    <a class="wa-btn wa-btn-primary wa-btn-sm" href="teams-agents/@selectedTeam.Name/edit" data-pw="team-edit-link">編集</a>
+                </div>
+            </div>
+
+            @{ var team = selectedTeam; }
+
+            <NarrationPanel Title="このチームはこう動きます"
+                            Headline="@WorkAgents.Core.Authoring.DefinitionNarrator.Headline(team)"
+                            Lines="@WorkAgents.Core.Authoring.DefinitionNarrator.Describe(team)" />
+            <div class="wa-mb"></div>
+
+            <section class="wa-panel wa-mb">
+                    <div class="wa-panel-header"><span>@(team.DisplayName ?? team.Name)</span><span class="wa-panel-sub">統括 1 · サブ @team.Members.Count · 委譲深さ上限 @team.Limits.MaxDelegationDepth</span></div>
+                    <div class="wa-table-wrap">
+                        <table class="wa-table" data-pw="team-table">
+                            <thead><tr><th>エージェント</th><th>役割</th><th>ツール</th><th>直接会話できる相手</th><th>モデル</th></tr></thead>
+                            <tbody>
+                            <tr>
+                                <td><span class="wa-avatar wa-agent-orch wa-inline-avatar">OR</span>@team.Orchestrator.Agent</td>
+                                <td>統括 · 分解と割当</td>
+                                <td class="wa-cell-dim">delegate, summarize</td>
+                                <td class="wa-cell-dim">全員</td>
+                                <td class="wa-cell-dim">定義時に解決</td>
+                            </tr>
+                            @foreach (var member in team.Members)
+                            {
+                                <tr>
+                                    <td><span class="wa-avatar @AgentClass(member.Agent) wa-inline-avatar">@Initials(member.Agent)</span>@member.Agent</td>
+                                    <td>@(member.Role ?? "サブエージェント")</td>
+                                    <td class="wa-cell-dim">エージェント定義から解決</td>
+                                    <td class="wa-cell-dim">@AllowedPeers(team, member.Agent)</td>
+                                    <td class="wa-cell-dim">定義時に解決</td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <div class="wa-two-col wa-mb-lg">
+                    <section class="wa-panel">
+                        <div class="wa-panel-header"><span>会話の許可関係</span><span class="wa-panel-sub">許可されていない組み合わせは統括経由</span></div>
+                        <div class="wa-panel-body">
+                            <div class="wa-note wa-note-accent wa-mb">既定は統括経由。直接会話は明示的に許可した組み合わせのみに限定され、委譲は @team.Limits.MaxDelegationDepth 段までです。</div>
+                            @if (team.ChannelsAllow.Count == 0)
+                            {
+                                <div class="wa-cell-dim">直接会話の許可はありません。</div>
+                            }
+                            @foreach (var rule in team.ChannelsAllow)
+                            {
+                                <div class="wa-kv"><span>@rule.From ⇄ @rule.To</span><span>許可 (@string.Join(", ", rule.Kinds.Select(KindLabel)))</span></div>
+                            }
+                        </div>
+                    </section>
+                    <section class="wa-panel" style="align-self:start">
+                        <div class="wa-panel-header"><span>定義ファイル</span></div>
+                        <div class="wa-panel-body">
+                            <div class="wa-kv"><span>チーム</span><span>teams/@team.Name/team.yaml</span></div>
+                            <div class="wa-kv"><span>統括</span><span>agents/@team.Orchestrator.Agent/</span></div>
+                            <div class="wa-kv"><span>最大並列</span><span>@team.Limits.MaxParallelInstances</span></div>
+                            <div class="wa-note wa-note-accent wa-mt">画面での編集内容はファイルへ書き戻され、ファイルだけで同じ振る舞いを再現できます。</div>
+                        </div>
+                    </section>
+                </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string? TeamName { get; set; }
+
+    private TeamDefinition? selectedTeam;
+
+    /// <summary>GUI から保存した直後の定義もそのまま出せるよう、編集用のスナップショットを見る。</summary>
+    private IReadOnlyList<TeamDefinition> Teams => Authoring.Teams;
+
+    private IReadOnlyList<WorkAgents.Agents.Loading.AgentDefinition> Agents => Authoring.Agents;
+
+    private const int PageSize = 10;
+
+    private string teamSearch = string.Empty;
+    private string agentSearch = string.Empty;
+    private int teamPage;
+    private int agentPage;
+
+    private List<TeamDefinition> FilteredTeams => Teams
+        .Where(team => string.IsNullOrWhiteSpace(teamSearch)
+            || (team.DisplayName ?? team.Name).Contains(teamSearch, StringComparison.OrdinalIgnoreCase)
+            || team.Name.Contains(teamSearch, StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    private List<WorkAgents.Agents.Loading.AgentDefinition> FilteredAgents => Agents
+        .Where(agent => string.IsNullOrWhiteSpace(agentSearch)
+            || agent.Name.Contains(agentSearch, StringComparison.OrdinalIgnoreCase)
+            || (agent.Description ?? string.Empty).Contains(agentSearch, StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    private int TeamPageCount => Math.Max(1, (FilteredTeams.Count + PageSize - 1) / PageSize);
+    private int AgentPageCount => Math.Max(1, (FilteredAgents.Count + PageSize - 1) / PageSize);
+
+    private List<TeamDefinition> PagedTeams => FilteredTeams.Skip(ClampedTeamPage * PageSize).Take(PageSize).ToList();
+    private List<WorkAgents.Agents.Loading.AgentDefinition> PagedAgents => FilteredAgents.Skip(ClampedAgentPage * PageSize).Take(PageSize).ToList();
+
+    private int ClampedTeamPage => Math.Clamp(teamPage, 0, TeamPageCount - 1);
+    private int ClampedAgentPage => Math.Clamp(agentPage, 0, AgentPageCount - 1);
+
+    private void OnTeamSearchChanged(ChangeEventArgs args)
+    {
+        teamSearch = args.Value?.ToString() ?? string.Empty;
+        teamPage = 0;
+    }
+
+    private void OnAgentSearchChanged(ChangeEventArgs args)
+    {
+        agentSearch = args.Value?.ToString() ?? string.Empty;
+        agentPage = 0;
+    }
+
+    /// <summary>そのエージェントを統括またはメンバーとして使っているチーム名の一覧。増えてきたときに所属関係を追いやすくする。</summary>
+    private string TeamsSummary(string agentName)
+    {
+        var names = Teams
+            .Where(team => team.Orchestrator.Agent == agentName || team.Members.Any(member => member.Agent == agentName))
+            .Select(team => team.DisplayName ?? team.Name)
+            .ToArray();
+        return names.Length == 0 ? "—" : string.Join(", ", names);
+    }
+
+    private static string SkillSummary(WorkAgents.Agents.Loading.AgentDefinition agent)
+    {
+        var shared = agent.SharedSkillNames.Count == 0 ? null : string.Join(", ", agent.SharedSkillNames);
+        var local = agent.LocalSkillNames.Count == 0 ? null : $"ローカル {agent.LocalSkillNames.Count} 件";
+        var parts = new[] { shared, local }.Where(part => part is not null);
+        return parts.Any() ? string.Join(" / ", parts) : "なし";
+    }
+
+    private static string HarnessSummary(WorkAgents.Agents.Loading.AgentDefinition agent)
+    {
+        var parts = new List<string>();
+        parts.Add(agent.HarnessShell ? "シェルあり" : "シェルなし");
+        if (!string.IsNullOrWhiteSpace(agent.HarnessFileStore))
+        {
+            parts.Add(agent.HarnessFileStore!);
+        }
+        return string.Join(" / ", parts);
+    }
+
+    protected override void OnParametersSet()
+    {
+        selectedTeam = TeamName is null
+            ? null
+            : Teams.FirstOrDefault(t => string.Equals(t.Name, TeamName, StringComparison.Ordinal));
+    }
+
+    private static string Initials(string name) => string.Concat(name.Split(['-', '_', ' ', '/'], StringSplitOptions.RemoveEmptyEntries).Take(2).Select(part => char.ToUpperInvariant(part[0])));
+    private static string AgentClass(string name) => name.Contains("spec", StringComparison.OrdinalIgnoreCase) ? "wa-agent-spec" : name.Contains("test", StringComparison.OrdinalIgnoreCase) ? "wa-agent-test" : name.Contains("review", StringComparison.OrdinalIgnoreCase) ? "wa-agent-review" : "wa-agent-dev";
+    private static string AllowedPeers(TeamDefinition team, string agent) => string.Join(", ", team.ChannelsAllow.Where(rule => rule.From == agent).Select(rule => rule.To).DefaultIfEmpty("統括経由"));
+    private static string KindLabel(MessageKind kind) => kind switch { MessageKind.Question => "質問", MessageKind.Answer => "回答", MessageKind.Share => "共有", MessageKind.Delegate => "委譲", _ => kind.ToString() };
+}

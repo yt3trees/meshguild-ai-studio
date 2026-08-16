@@ -1,0 +1,607 @@
+@page "/missions/{MissionId}"
+@page "/team-room"
+@implements IAsyncDisposable
+@using WorkAgents.Core
+@using WorkAgents.Core.Abstractions
+@using WorkAgents.Core.Loops
+@using WorkAgents.Core.Missions
+@using WorkAgents.Web.Services
+@inject MissionHubClient HubClient
+@inject IMessageStore MessageStore
+@inject IAgentInstanceStore AgentInstanceStore
+@inject IMissionStore MissionStore
+@inject ILoopStore LoopStore
+@inject IMissionArtifactStore ArtifactStore
+@inject IMissionWorkspaceReader MissionWorkspaceReader
+@inject IApprovalStore ApprovalStore
+@inject IApprovalService ApprovalService
+@inject WorkAgents.Orchestration.MissionEngine MissionEngine
+@inject MissionApiClient MissionApi
+
+<PageTitle>MeshGuild AI Studio | Team Room</PageTitle>
+
+@if (mission is null)
+{
+    <div class="wa-scroll-page">
+        <div class="wa-inner">
+            <div class="wa-head"><div><h1>Team Room</h1><p>実行中のミッションを選択すると会話が表示されます</p></div></div>
+            <div class="wa-panel"><div class="wa-empty">表示できるミッションがありません。Mission Control から新しいミッションを開始してください。</div></div>
+        </div>
+    </div>
+}
+else
+{
+    <section class="wa-room team-room" data-pw="team-room">
+        <aside class="wa-room-col wa-room-left">
+            <div class="wa-col-head"><span>Team</span><span class="wa-tag wa-tag-accent">@(mission.TeamName ?? mission.TargetName)</span></div>
+            <div class="wa-col-scroll">
+                @foreach (var agent in agents)
+                {
+                    <div class="wa-room-member @(agent.InstanceId == selectedAgentId ? "is-active" : null)" @onclick="() => selectedAgentId = agent.InstanceId">
+                        <span class="wa-avatar @AgentClass(agent)">@AgentInitials(agent)</span>
+                        <div>
+                            <div class="wa-member-name">@DisplayAgentName(agent)</div>
+                            <div class="wa-member-role">@(agent.Role == AgentInstanceRole.Orchestrator ? "統括" : agent.AgentName) · @(agent.ModelName ?? "model 未設定")</div>
+                            <div class="wa-member-state"><span class="wa-pulse @StateClass(agent.State)"></span>@StateLabel(agent)</div>
+                            @if (agent.State == AgentInstanceState.AwaitingApproval)
+                            {
+                                <div class="wa-member-wait">操作の承認を待っています</div>
+                            }
+                        </div>
+                    </div>
+                }
+                @if (agents.Count == 0)
+                {
+                    <div class="wa-empty">参加中のエージェントはありません。</div>
+                }
+                <div class="wa-side-block">
+                    <div class="wa-side-title">会話の許可関係</div>
+                    <div class="wa-note wa-note-accent">サブエージェント間の直接会話は team.yaml で許可された組み合わせに限られます。それ以外は Orchestrator 経由です。</div>
+                </div>
+            </div>
+        </aside>
+
+        <main class="wa-room-col">
+            <div class="wa-col-head">
+                <h1 class="wa-room-heading">Team Room</h1>
+                <span class="wa-col-title">@mission.Goal</span>
+                <span class="wa-tag wa-tag-warn">iteration @CurrentIteration / @MaxIterations</span>
+            </div>
+            <div class="wa-thread" aria-live="polite" data-pw="message-thread">
+                @if (messages.Count == 0 && activeStreams.Count == 0)
+                {
+                    <div class="wa-empty">会話はまだありません。</div>
+                }
+                else
+                {
+                    <div class="wa-divider-row"><span>mission · @mission.CreatedAt.ToLocalTime().ToString("HH:mm")</span></div>
+                    @foreach (var message in messages)
+                    {
+                        <article class="wa-message @(MessageClass(message))" @onclick="() => selectedMessage = message" @key="message.MessageId" data-pw="message">
+                            <span class="wa-avatar @MessageAgentClass(message)">@MessageInitials(message)</span>
+                            <div>
+                                <div class="wa-message-head">
+                                    <span class="wa-message-from">@SenderName(message)</span>
+                                    <span class="wa-message-arrow">→</span>
+                                    <span class="wa-message-to">@RecipientName(message)</span>
+                                    <span class="wa-tag">@KindLabel(message.Kind)</span>
+                                    <span class="wa-message-time">@message.CreatedAt.ToLocalTime().ToString("HH:mm:ss")</span>
+                                </div>
+                                <div class="wa-message-body">@message.Body</div>
+                                <div class="wa-message-meta">
+                                    <span>depth @message.DelegationDepth</span>
+                                    @if (message.InputRefs is not null) { <span>input: @message.InputRefs</span> }
+                                    @if (message.CostRecordId is not null) { <span>cost: @message.CostRecordId</span> }
+                                </div>
+                            </div>
+                        </article>
+                    }
+                    @foreach (var stream in activeStreams)
+                    {
+                        <article class="wa-message wa-message-streaming @StreamAgentClass(stream)" @key="stream.StreamId" data-pw="message-streaming">
+                            <span class="wa-avatar @StreamAgentClass(stream)">@StreamInitials(stream)</span>
+                            <div>
+                                <div class="wa-message-head">
+                                    <span class="wa-message-from">@StreamSenderName(stream)</span>
+                                    <span class="wa-tag wa-tag-accent">生成中</span>
+                                </div>
+                                <div class="wa-message-body">@stream.Text<span class="wa-stream-caret" aria-hidden="true"></span></div>
+                            </div>
+                        </article>
+                    }
+                }
+            </div>
+
+            <div class="wa-composer">
+                @if (!string.IsNullOrWhiteSpace(actionError))
+                {
+                    <div class="wa-load-error" role="alert">@actionError</div>
+                }
+                <div class="wa-composer-hint"><span>チームへ割り込む</span><span class="wa-tag">@@dev</span><span class="wa-tag">@@spec</span><span class="wa-tag">@@all</span></div>
+                <div class="wa-composer-box">
+                    <textarea class="wa-composer-input" @bind="instruction" @bind:event="oninput" placeholder="方針の訂正や追加情報を入力すると、次の発言から反映されます"></textarea>
+                    <div class="wa-composer-actions">
+                        <button class="wa-btn wa-btn-primary wa-btn-sm" type="button" @onclick="SendInstructionAsync" disabled="@string.IsNullOrWhiteSpace(instruction)">送信</button>
+                        @if (mission.Status == MissionStatus.Paused)
+                        {
+                            <button class="wa-btn wa-btn-sm" type="button" @onclick="ResumeAsync">再開</button>
+                        }
+                        else
+                        {
+                            <button class="wa-btn wa-btn-sm" type="button" @onclick="PauseAsync">一時停止</button>
+                        }
+                        <button class="wa-btn wa-btn-danger wa-btn-sm" type="button" @onclick="AbortAsync">中断</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <aside class="wa-room-col wa-room-right">
+            <div class="wa-col-head"><span>Mission</span><span class="wa-tag @MissionStatusClass">@MissionStatusLabel</span></div>
+            <div class="wa-col-scroll">
+                <div class="wa-side-block">
+                    <div class="wa-side-title">状態</div>
+                    <div class="wa-kv"><span>Mission ID</span><span>@mission.MissionId</span></div>
+                    <div class="wa-kv"><span>起動</span><span>@mission.TriggerKind · @mission.CreatedAt.ToLocalTime().ToString("HH:mm")</span></div>
+                    <div class="wa-kv"><span>グラフ</span><span>@(mission.GraphVersionId ?? "team execution")</span></div>
+                    <div class="wa-kv"><span>エージェント</span><span>@agents.Count</span></div>
+                </div>
+                <div class="wa-side-block">
+                    <div class="wa-side-title">予算</div>
+                    <div class="wa-meter"><div class="wa-meter-head"><span>コスト</span><span>$@(budget?.CostUsedUsd.ToString("0.00") ?? "0.00") / $@(budget?.CostLimitUsd?.ToString("0.00") ?? "-")</span></div><div class="wa-meter-bar"><div class="wa-meter-fill wa-fill-accent" style="width:@CostPercent%"></div></div></div>
+                    <div class="wa-meter"><div class="wa-meter-head"><span>反復</span><span>@CurrentIteration / @MaxIterations</span></div><div class="wa-meter-bar"><div class="wa-meter-fill wa-fill-ok" style="width:@IterationPercent%"></div></div></div>
+                    <div class="wa-meter"><div class="wa-meter-head"><span>実行時間</span><span>@ElapsedMinutes 分 / @TimeLimitMinutes 分</span></div><div class="wa-meter-bar"><div class="wa-meter-fill wa-fill-ok" style="width:@TimePercent%"></div></div></div>
+                </div>
+                <div class="wa-side-block">
+                    <div class="wa-side-title">成果物</div>
+                    @foreach (var artifact in artifacts)
+                    {
+                        <div class="wa-artifact">
+                            <span class="wa-tag">artifact</span>
+                            <span class="wa-artifact-name">@artifact.Path</span>
+                            <a class="wa-artifact-download" href="@MissionApi.BuildArtifactDownloadUrl(MissionId, artifact.ArtifactId)" download>ダウンロード</a>
+                        </div>
+                    }
+                    @if (artifacts.Count == 0) { <div class="wa-cell-dim">成果物はまだありません。</div> }
+                </div>
+                <div class="wa-side-block">
+                    <div class="wa-side-title wa-side-title-row"><span>共有ファイル</span><span class="wa-tag @WorkspaceStateClass">@WorkspaceStateLabel</span></div>
+                    @if (workspace is { Items.Count: > 0 })
+                    {
+                        <div class="wa-workspace-toolbar">
+                            <input class="wa-workspace-search" @bind="workspaceSearch" @bind:event="oninput" placeholder="相対パスを検索" aria-label="共有ファイルを検索" />
+                            <select class="wa-workspace-filter" @bind="workspaceFilter" aria-label="共有ファイルの状態を絞り込み">
+                                <option value="all">すべて</option>
+                                <option value="changed">変更あり</option>
+                                <option value="unreadable">読み取り不可</option>
+                            </select>
+                        </div>
+                    }
+                    @if (workspace is null)
+                    {
+                        <div class="wa-cell-dim">共有ファイルを読み込んでいます。</div>
+                    }
+                    else if (workspace.Items.Count == 0)
+                    {
+                        <div class="wa-note @WorkspaceStateNoteClass">@WorkspaceStateMessage</div>
+                    }
+                    else
+                    {
+                        @foreach (var item in FilteredWorkspaceItems)
+                        {
+                            <div class="wa-workspace-file @(IsWorkspaceChanged(item) ? "is-changed" : null)">
+                                <span class="wa-workspace-kind">@(item.Kind == WorkspaceEntryKind.Directory ? "DIR" : "FILE")</span>
+                                <div class="wa-workspace-file-main">
+                                    <div class="wa-workspace-file-path">@item.RelativePath</div>
+                                    <div class="wa-workspace-file-meta">@WorkspaceEntryLabel(item) · @WorkspaceSize(item.SizeBytes) · @WorkspaceTime(item.LastWriteTimeUtc)</div>
+                                </div>
+                                @if (IsWorkspaceChanged(item))
+                                {
+                                    <span class="wa-tag wa-tag-warn">更新</span>
+                                }
+                            </div>
+                        }
+                    }
+                </div>
+                <div class="wa-side-block wa-side-block-last">
+                    <div class="wa-side-title">停止条件</div>
+                    <div class="wa-note wa-note-warn">テスト全通過かつ重大指摘 0 で停止。上限到達時は「未収束で停止」として終了します。</div>
+                </div>
+                @if (selectedMessage is not null)
+                {
+                    <div class="wa-side-block">
+                        <div class="wa-side-title">選択した発言</div>
+                        <div class="wa-kv"><span>種別</span><span>@KindLabel(selectedMessage.Kind)</span></div>
+                        <div class="wa-cell-dim">@selectedMessage.Body</div>
+                    </div>
+                }
+                @if (approvals.Count > 0)
+                {
+                    <div class="wa-side-block">
+                        <div class="wa-side-title">承認待ち</div>
+                        @foreach (var approval in approvals)
+                        {
+                            <div class="wa-approval-inline">
+                                <div class="wa-cell-dim">@approval.Tool · @approval.ExpiresAt.ToLocalTime().ToString("HH:mm")</div>
+                                <div class="wa-approval-summary">@approval.ArgsSummary</div>
+                                <div class="wa-inline-actions"><button class="wa-btn wa-btn-primary wa-btn-sm" @onclick="() => DecideApprovalAsync(approval, ApprovalStatus.Approved)">承認</button><button class="wa-btn wa-btn-danger wa-btn-sm" @onclick="() => DecideApprovalAsync(approval, ApprovalStatus.Rejected)">却下</button></div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </aside>
+    </section>
+}
+
+@code {
+    [Parameter] public string MissionId { get; set; } = string.Empty;
+
+    private Mission? mission;
+    private IReadOnlyList<AgentInstance> agents = Array.Empty<AgentInstance>();
+    private readonly List<Message> messages = new();
+    private IReadOnlyList<LoopRun> loops = Array.Empty<LoopRun>();
+    private IReadOnlyList<MissionArtifact> artifacts = Array.Empty<MissionArtifact>();
+    private MissionWorkspaceSnapshot? workspace;
+    private readonly HashSet<string> changedWorkspaceItems = new(StringComparer.Ordinal);
+    private string workspaceSearch = string.Empty;
+    private string workspaceFilter = "all";
+    private IReadOnlyList<ApprovalRequest> approvals = Array.Empty<ApprovalRequest>();
+    private Budget? budget;
+    private string instruction = string.Empty;
+    private string? selectedAgentId;
+    private Message? selectedMessage;
+    private string? actionError;
+    private readonly CancellationTokenSource refreshCancellation = new();
+    private long lastSeq;
+
+    private int CurrentIteration => loops.SelectMany(GetIterations).Select(iteration => iteration.IterationNo).DefaultIfEmpty(0).Max();
+    private int MaxIterations => loops.Select(loop => loop.MaxIterations).DefaultIfEmpty(10).Max();
+    private int ElapsedMinutes => budget is null ? 0 : Math.Max(0, budget.ElapsedSeconds / 60);
+    private int TimeLimitMinutes => Math.Max(1, (budget?.TimeLimitSeconds ?? 5400) / 60);
+    private int CostPercent => Percent(budget?.CostUsedUsd ?? 0, budget?.CostLimitUsd ?? 5);
+    private int IterationPercent => Percent(CurrentIteration, MaxIterations);
+    private int TimePercent => Percent(ElapsedMinutes, TimeLimitMinutes);
+    private string MissionStatusLabel => mission?.Status switch
+    {
+        MissionStatus.AwaitingApproval => "Awaiting approval",
+        MissionStatus.Paused => "Paused",
+        MissionStatus.Succeeded => "Succeeded",
+        MissionStatus.NotConverged => "Not converged",
+        MissionStatus.Failed => "Failed",
+        MissionStatus.Aborted => "Aborted",
+        _ => "Running",
+    } ?? "Loading";
+    private string MissionStatusClass => mission is null ? "wa-tag-accent" : mission.Status switch
+    {
+        MissionStatus.AwaitingApproval => "wa-tag-warn",
+        MissionStatus.Succeeded => "wa-tag-ok",
+        MissionStatus.Failed or MissionStatus.Aborted or MissionStatus.NotConverged => "wa-tag-bad",
+        _ => "wa-tag-accent",
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        HubClient.MessagesCaughtUp += OnMessagesCaughtUpAsync;
+        HubClient.MissionStatusChanged += OnMissionStatusChanged;
+        HubClient.AgentStreamUpdated += OnAgentStreamUpdated;
+        await ResolveMissionAsync();
+        await LoadAsync();
+        try
+        {
+            await HubClient.StartAsync();
+            if (mission is not null) await HubClient.SubscribeAsync(mission.MissionId);
+        }
+        catch
+        {
+            // The Web UI also has a polling fallback when the Host is offline.
+        }
+        _ = RefreshLoopAsync(refreshCancellation.Token);
+    }
+
+    private async Task ResolveMissionAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(MissionId)) return;
+        var active = await MissionStore.ListAsync(new MissionQuery
+        {
+            Statuses = [MissionStatus.Running, MissionStatus.Paused, MissionStatus.AwaitingApproval],
+            Limit = 1,
+        });
+        MissionId = active.FirstOrDefault()?.MissionId ?? string.Empty;
+    }
+
+    private async Task LoadAsync()
+    {
+        if (string.IsNullOrWhiteSpace(MissionId)) return;
+        mission = await MissionStore.GetAsync(MissionId);
+        if (mission is null) return;
+        agents = await AgentInstanceStore.ListByMissionAsync(MissionId);
+        loops = await LoopStore.ListLoopRunsAsync(MissionId);
+        loopIterations.Clear();
+        foreach (var loop in loops)
+        {
+            loopIterations[loop.LoopRunId] = await LoopStore.ListIterationsAsync(loop.LoopRunId);
+        }
+        artifacts = await ArtifactStore.ListMissionAsync(MissionId);
+        await LoadWorkspaceAsync();
+        approvals = (await ApprovalStore.ListPendingAsync()).Where(item => item.MissionId == MissionId).ToArray();
+        budget = await MissionStore.GetBudgetAsync(MissionId);
+        var initial = await MessageStore.ListAsync(MissionId, limit: 2_000);
+        messages.Clear();
+        messages.AddRange(initial);
+        lastSeq = messages.LastOrDefault()?.Seq ?? 0;
+    }
+
+    private async Task LoadWorkspaceAsync()
+    {
+        var previous = workspace;
+        try
+        {
+            workspace = await MissionWorkspaceReader.ReadAsync(MissionId);
+        }
+        catch (KeyNotFoundException)
+        {
+            workspace = new MissionWorkspaceSnapshot
+            {
+                MissionId = MissionId,
+                State = MissionWorkspaceState.Unreadable,
+                ObservedAtUtc = DateTimeOffset.UtcNow,
+            };
+        }
+        catch (Exception)
+        {
+            workspace = new MissionWorkspaceSnapshot
+            {
+                MissionId = MissionId,
+                State = MissionWorkspaceState.Unreadable,
+                ObservedAtUtc = DateTimeOffset.UtcNow,
+            };
+        }
+
+        changedWorkspaceItems.Clear();
+        if (previous is null || workspace is null)
+        {
+            return;
+        }
+
+        var oldItems = previous.Items.ToDictionary(item => item.RelativePath, StringComparer.Ordinal);
+        foreach (var item in workspace.Items)
+        {
+            if (!oldItems.TryGetValue(item.RelativePath, out var old)
+                || old.Kind != item.Kind
+                || old.SizeBytes != item.SizeBytes
+                || old.LastWriteTimeUtc != item.LastWriteTimeUtc
+                || old.Status != item.Status)
+            {
+                changedWorkspaceItems.Add(item.RelativePath);
+            }
+        }
+    }
+
+    private async Task RefreshLoopAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                await LoadAsync();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+    }
+
+    private async Task OnMessagesCaughtUpAsync(string missionId, IReadOnlyList<Message> updates)
+    {
+        if (!string.Equals(missionId, MissionId, StringComparison.Ordinal)) return;
+        foreach (var message in updates.Where(message => messages.All(existing => existing.MessageId != message.MessageId))) messages.Add(message);
+        lastSeq = Math.Max(lastSeq, updates.LastOrDefault()?.Seq ?? 0);
+        // 確定した発言に置き換わった暫定表示を落とす (HubClient 側で除去済みのものを取り直す)。
+        activeStreams = HubClient.GetActiveStreams(MissionId);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnMissionStatusChanged(string missionId)
+    {
+        if (missionId == MissionId) _ = InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+    }
+
+    private async Task SendInstructionAsync()
+    {
+        await RunActionAsync(async () =>
+        {
+            await MissionApi.SendInstructionAsync(MissionId, instruction.Trim());
+            instruction = string.Empty;
+            await LoadAsync();
+        });
+    }
+
+    private Task PauseAsync() => RunActionAsync(async () => { await MissionEngine.PauseAsync(MissionId); await LoadAsync(); });
+    private Task ResumeAsync() => RunActionAsync(async () => { await MissionEngine.ResumeAsync(MissionId); await LoadAsync(); });
+    private Task AbortAsync() => RunActionAsync(async () => { await MissionEngine.AbortAsync(MissionId); await LoadAsync(); });
+
+    private async Task DecideApprovalAsync(ApprovalRequest approval, ApprovalStatus status)
+        => await RunActionAsync(async () =>
+        {
+            await ApprovalService.DecideAsync(approval.ApprovalId, status, "local-user", status == ApprovalStatus.Rejected ? "Rejected from Team Room." : null);
+            await LoadAsync();
+        });
+
+    private async Task RunActionAsync(Func<Task> action)
+    {
+        actionError = null;
+        try { await action(); }
+        catch (Exception ex) { actionError = $"操作に失敗しました: {ex.Message}"; }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private IEnumerable<Iteration> GetIterations(LoopRun loop)
+        => loopIterations.TryGetValue(loop.LoopRunId, out var values) ? values : Array.Empty<Iteration>();
+
+    private readonly Dictionary<string, IReadOnlyList<Iteration>> loopIterations = new(StringComparer.Ordinal);
+
+    private static int Percent(double value, double limit) => limit <= 0 ? 0 : Math.Clamp((int)Math.Round(value / limit * 100), 0, 100);
+
+    private string WorkspaceStateLabel => workspace?.State switch
+    {
+        MissionWorkspaceState.Available => "利用可能",
+        MissionWorkspaceState.Empty => "空",
+        MissionWorkspaceState.Deleted => "削除済み",
+        MissionWorkspaceState.Unreadable => "利用不可",
+        _ => "未作成",
+    };
+
+    private string WorkspaceStateClass => workspace?.State switch
+    {
+        MissionWorkspaceState.Available => "wa-tag-ok",
+        MissionWorkspaceState.Empty or MissionWorkspaceState.NotCreated => "wa-tag-accent",
+        _ => "wa-tag-bad",
+    };
+
+    private string WorkspaceStateNoteClass => workspace?.State switch
+    {
+        MissionWorkspaceState.Empty => "wa-note-accent",
+        MissionWorkspaceState.NotCreated => "wa-note-warn",
+        _ => "wa-note-bad",
+    };
+
+    private string WorkspaceStateMessage => workspace?.State switch
+    {
+        MissionWorkspaceState.Empty => "共有作業フォルダは空です。",
+        MissionWorkspaceState.Deleted => "共有作業フォルダは保持期限などにより削除されています。",
+        MissionWorkspaceState.Unreadable => "共有作業フォルダを読み取れません。",
+        _ => "共有作業フォルダはまだ作成されていません。",
+    };
+
+    private bool IsWorkspaceChanged(MissionWorkspaceEntry item)
+        => changedWorkspaceItems.Contains(item.RelativePath);
+
+    private IEnumerable<MissionWorkspaceEntry> FilteredWorkspaceItems
+        => (workspace?.Items ?? Array.Empty<MissionWorkspaceEntry>()).Where(item =>
+            (string.IsNullOrWhiteSpace(workspaceSearch)
+                || item.RelativePath.Contains(workspaceSearch.Trim(), StringComparison.OrdinalIgnoreCase))
+            && (workspaceFilter switch
+            {
+                "changed" => IsWorkspaceChanged(item),
+                "unreadable" => item.Status == WorkspaceEntryStatus.Unreadable,
+                _ => true,
+            }));
+
+    private static string WorkspaceEntryLabel(MissionWorkspaceEntry item)
+        => item.Status == WorkspaceEntryStatus.Unreadable
+            ? "読み取り不可"
+            : item.Kind == WorkspaceEntryKind.Directory ? "フォルダ" : "ファイル";
+
+    private static string WorkspaceSize(long? bytes)
+        => bytes is null ? "--" : bytes.Value < 1024 ? $"{bytes.Value} B" : $"{bytes.Value / 1024d:0.0} KB";
+
+    private static string WorkspaceTime(DateTimeOffset? value)
+        => value?.ToLocalTime().ToString("HH:mm:ss") ?? "--";
+
+    private string SenderName(Message message) => message.SenderKind == MessageSenderKind.Human ? "あなた" : message.SenderKind == MessageSenderKind.System ? "System" : agents.FirstOrDefault(agent => agent.InstanceId == message.SenderInstanceId)?.AgentName ?? message.SenderInstanceId ?? "Agent";
+    private string RecipientName(Message message) => message.RecipientInstanceId is null ? "チーム全員" : agents.FirstOrDefault(agent => agent.InstanceId == message.RecipientInstanceId)?.AgentName ?? message.RecipientInstanceId;
+    private string DisplayAgentName(AgentInstance agent) => agent.Role == AgentInstanceRole.Orchestrator ? "Orchestrator" : agent.AgentName;
+    private string MessageClass(Message message) => message.Kind switch { MessageKind.HumanInstruction => "wa-message-human", MessageKind.Share => "wa-message-share", MessageKind.Question => "wa-message-question", MessageKind.Answer => "wa-message-answer", _ => string.Empty };
+    private string MessageAgentClass(Message message) => message.SenderKind == MessageSenderKind.Human ? "wa-agent-human" : AgentClass(agents.FirstOrDefault(agent => agent.InstanceId == message.SenderInstanceId) ?? new AgentInstance { InstanceId = "system", MissionId = MissionId, AgentName = "orchestrator", Role = AgentInstanceRole.Orchestrator, InstanceNo = 0 });
+    private string MessageInitials(Message message) => message.SenderKind == MessageSenderKind.Human ? "YT" : AgentInitials(agents.FirstOrDefault(agent => agent.InstanceId == message.SenderInstanceId) ?? new AgentInstance { InstanceId = "system", MissionId = MissionId, AgentName = "orchestrator", Role = AgentInstanceRole.Orchestrator, InstanceNo = 0 });
+
+    private static string KindLabel(MessageKind kind) => kind switch
+    {
+        MessageKind.Delegate => "委譲",
+        MessageKind.Question => "質問",
+        MessageKind.Answer => "回答",
+        MessageKind.Share => "共有",
+        MessageKind.Handoff => "引き継ぎ",
+        MessageKind.Report => "報告",
+        MessageKind.HumanInstruction => "割り込み",
+        MessageKind.Rejected => "拒否",
+        _ => "記録",
+    };
+
+    private static string AgentInitials(AgentInstance agent)
+    {
+        var words = agent.AgentName.Split(['-', '_', ' ', '/'], StringSplitOptions.RemoveEmptyEntries);
+        return string.Concat(words.Take(2).Select(word => char.ToUpperInvariant(word[0])));
+    }
+
+    private static string AgentClass(AgentInstance agent) => agent.Role == AgentInstanceRole.Orchestrator ? "wa-agent-orch" : agent.AgentName.Contains("spec", StringComparison.OrdinalIgnoreCase) ? "wa-agent-spec" : agent.AgentName.Contains("test", StringComparison.OrdinalIgnoreCase) ? "wa-agent-test" : agent.AgentName.Contains("review", StringComparison.OrdinalIgnoreCase) ? "wa-agent-review" : "wa-agent-dev";
+    private static string StateClass(AgentInstanceState state) => state switch { AgentInstanceState.AwaitingApproval => "wa-pulse-hold", AgentInstanceState.AwaitingReply => "wa-pulse-wait", AgentInstanceState.Thinking or AgentInstanceState.ToolRunning => "wa-pulse-run", AgentInstanceState.Completed => "wa-pulse-ok", _ => "wa-pulse-idle" };
+    private static string StateLabel(AgentInstance agent) => agent.State switch { AgentInstanceState.AwaitingApproval => "承認待ち", AgentInstanceState.AwaitingReply => $"{agent.AwaitingInstanceId ?? "相手"} の完了待ち", AgentInstanceState.Thinking => "判断中", AgentInstanceState.ToolRunning => "ツール実行中", AgentInstanceState.Completed => "完了 · 待機", AgentInstanceState.Failed => "失敗", AgentInstanceState.Stopped => "停止", _ => "待機" };
+
+    private IReadOnlyList<ActiveAgentStreamView> activeStreams = Array.Empty<ActiveAgentStreamView>();
+    private readonly object streamRenderGate = new();
+    private static readonly TimeSpan StreamRenderInterval = TimeSpan.FromMilliseconds(100);
+    private DateTimeOffset lastStreamRender = DateTimeOffset.MinValue;
+    private bool streamRenderScheduled;
+
+    /// <summary>
+    /// 増分は 1 文字単位で届きうるため、描画は <see cref="StreamRenderInterval"/> に間引く。
+    /// 間引いて捨てた更新も、次の描画で最新のスナップショットとしてまとめて反映される。
+    /// </summary>
+    private void OnAgentStreamUpdated(string missionId)
+    {
+        if (!string.Equals(missionId, MissionId, StringComparison.Ordinal)) return;
+
+        TimeSpan delay;
+        lock (streamRenderGate)
+        {
+            if (streamRenderScheduled) return;
+            var now = DateTimeOffset.UtcNow;
+            var due = lastStreamRender + StreamRenderInterval;
+            if (now >= due)
+            {
+                lastStreamRender = now;
+                delay = TimeSpan.Zero;
+            }
+            else
+            {
+                streamRenderScheduled = true;
+                delay = due - now;
+            }
+        }
+
+        _ = RenderStreamsAsync(delay);
+    }
+
+    private async Task RenderStreamsAsync(TimeSpan delay)
+    {
+        if (delay > TimeSpan.Zero)
+        {
+            await Task.Delay(delay);
+            lock (streamRenderGate)
+            {
+                streamRenderScheduled = false;
+                lastStreamRender = DateTimeOffset.UtcNow;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(MissionId)) return;
+        activeStreams = HubClient.GetActiveStreams(MissionId);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private string StreamSenderName(ActiveAgentStreamView stream)
+        => agents.FirstOrDefault(agent => agent.InstanceId == stream.InstanceId)?.AgentName ?? stream.AgentName;
+
+    private string StreamAgentClass(ActiveAgentStreamView stream)
+        => AgentClass(agents.FirstOrDefault(agent => agent.InstanceId == stream.InstanceId)
+            ?? new AgentInstance { InstanceId = stream.InstanceId, MissionId = MissionId, AgentName = stream.AgentName, Role = AgentInstanceRole.Member, InstanceNo = 0 });
+
+    private string StreamInitials(ActiveAgentStreamView stream)
+        => AgentInitials(agents.FirstOrDefault(agent => agent.InstanceId == stream.InstanceId)
+            ?? new AgentInstance { InstanceId = stream.InstanceId, MissionId = MissionId, AgentName = stream.AgentName, Role = AgentInstanceRole.Member, InstanceNo = 0 });
+
+    public async ValueTask DisposeAsync()
+    {
+        refreshCancellation.Cancel();
+        refreshCancellation.Dispose();
+        HubClient.MessagesCaughtUp -= OnMessagesCaughtUpAsync;
+        HubClient.MissionStatusChanged -= OnMissionStatusChanged;
+        HubClient.AgentStreamUpdated -= OnAgentStreamUpdated;
+        if (!string.IsNullOrWhiteSpace(MissionId))
+        {
+            try { await HubClient.UnsubscribeAsync(MissionId); } catch { }
+        }
+    }
+}

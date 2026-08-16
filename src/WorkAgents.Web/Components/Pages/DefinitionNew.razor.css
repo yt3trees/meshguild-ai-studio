@@ -1,0 +1,399 @@
+/* 新規定義ページ専用の見た目。
+   共通の wa-* プリミティブはそのまま使い、ここでは
+   「何をつくるか → どこから始めるか → 名前」の流れが目で追える分だけ足す。 */
+
+.def-head {
+    margin-bottom: 22px;
+}
+
+.def-kicker {
+    display: block;
+    margin-bottom: 6px;
+    color: #6d96ff;
+    font-family: "Geist Mono", Consolas, monospace;
+    font-size: 0.875rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+/* --- 見出し (1. 2.) ---------------------------------------------------- */
+
+.def-step {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 10px;
+}
+
+.def-step-no {
+    width: 20px;
+    height: 20px;
+    display: grid;
+    place-items: center;
+    color: #9db6ff;
+    background: #151c2c;
+    border: 1px solid #2c406f;
+    border-radius: 50%;
+    font-family: "Geist Mono", Consolas, monospace;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.def-step-label {
+    color: #adadb8;
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+/* --- 何をつくるか ------------------------------------------------------- */
+
+.def-kind {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.def-kind-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 13px;
+    position: relative;
+    padding: 15px 17px;
+    color: inherit;
+    background: #0e0e12;
+    border: 1px solid #1e1e25;
+    border-radius: 10px;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: left;
+    transition: border-color 0.12s ease, background 0.12s ease, transform 0.12s ease;
+}
+
+.def-kind-card:hover {
+    background: #101017;
+    border-color: #33334a;
+    transform: translateY(-1px);
+}
+
+.def-kind-card.selected {
+    background: #12141c;
+    border-color: rgba(94, 139, 255, 0.55);
+    box-shadow: 0 0 0 1px rgba(94, 139, 255, 0.22);
+}
+
+.def-kind-icon {
+    width: 34px;
+    height: 34px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    color: #9e9eab;
+    background: #141419;
+    border: 1px solid #26262f;
+    border-radius: 8px;
+}
+
+.def-kind-icon svg {
+    width: 19px;
+    height: 19px;
+}
+
+.def-kind-card.selected .def-kind-icon {
+    color: #b8caff;
+    background: #151c2c;
+    border-color: #2c406f;
+}
+
+.def-kind-text {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+
+.def-kind-text strong {
+    color: #ededf2;
+    font-size: 0.92rem;
+    font-weight: 600;
+}
+
+.def-kind-text small {
+    color: #9e9eab;
+    font-size: 0.875rem;
+    line-height: 1.6;
+}
+
+.def-kind-check {
+    position: absolute;
+    top: 12px;
+    right: 13px;
+    color: #6d96ff;
+    font-size: 0.875rem;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+
+.def-kind-card.selected .def-kind-check {
+    opacity: 1;
+}
+
+/* --- どこから始めるか --------------------------------------------------- */
+
+.def-seg {
+    display: inline-flex;
+    gap: 2px;
+    padding: 3px;
+    background: #0e0e12;
+    border: 1px solid #1e1e25;
+    border-radius: 8px;
+}
+
+.def-seg-btn {
+    padding: 7px 14px;
+    color: #9e9eab;
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.875rem;
+    transition: color 0.12s ease, background 0.12s ease;
+}
+
+.def-seg-btn:hover {
+    color: #c9c9d4;
+    background: #15151b;
+}
+
+.def-seg-btn.active {
+    color: #ededf2;
+    background: #1e2436;
+    box-shadow: inset 0 0 0 1px rgba(94, 139, 255, 0.35);
+    font-weight: 600;
+}
+
+.def-seg-help {
+    margin: 9px 0 0;
+    color: #8c8c98;
+    font-size: 0.875rem;
+    line-height: 1.6;
+}
+
+/* --- 雛形カード --------------------------------------------------------- */
+
+.def-tpl-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 12px;
+}
+
+.def-tpl-card {
+    display: grid;
+    align-content: start;
+    gap: 7px;
+    position: relative;
+    padding: 15px 16px;
+    color: inherit;
+    background: #111116;
+    border: 1px solid #1e1e25;
+    border-radius: 9px;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: left;
+    transition: border-color 0.12s ease, background 0.12s ease, transform 0.12s ease;
+}
+
+.def-tpl-card:hover {
+    background: #13131a;
+    border-color: #33334a;
+    transform: translateY(-1px);
+}
+
+.def-tpl-card.selected {
+    background: #13151d;
+    border-color: rgba(94, 139, 255, 0.55);
+    box-shadow: 0 0 0 1px rgba(94, 139, 255, 0.22);
+}
+
+.def-tpl-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.def-tpl-title {
+    color: #ededf2;
+    font-size: 0.88rem;
+    font-weight: 600;
+}
+
+.def-tpl-mark {
+    color: #6d96ff;
+    font-size: 0.875rem;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+
+.def-tpl-card.selected .def-tpl-mark {
+    opacity: 1;
+}
+
+.def-tpl-summary {
+    color: #adadb8;
+    font-size: 0.875rem;
+    line-height: 1.75;
+}
+
+.def-tpl-when {
+    margin-top: 3px;
+    padding-top: 9px;
+    color: #8c8c98;
+    border-top: 1px solid #1a1a21;
+    font-size: 0.875rem;
+    line-height: 1.7;
+}
+
+/* --- フォーム ----------------------------------------------------------- */
+
+.def-slot-body .wa-field:last-child,
+.wa-field-last {
+    margin-bottom: 0;
+}
+
+.def-slot-body .wa-field + .wa-field {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid #16161c;
+}
+
+.def-name-input,
+.def-draft-input {
+    padding: 9px 11px;
+    font-size: 0.875rem;
+}
+
+.def-name-input {
+    max-width: 340px;
+    font-family: "Geist Mono", Consolas, monospace;
+}
+
+.def-draft-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 14px;
+}
+
+.def-draft-note {
+    color: #8c8c98;
+    font-size: 0.875rem;
+}
+
+.def-note {
+    margin-top: 12px;
+}
+
+.def-path {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 14px 0 0;
+    padding-top: 12px;
+    border-top: 1px solid #16161c;
+    color: #8c8c98;
+    font-size: 0.875rem;
+}
+
+.def-path code {
+    padding: 3px 7px;
+    color: #adadb8;
+    background: #111116;
+    border: 1px solid #1e1e25;
+    border-radius: 5px;
+    font-family: "Geist Mono", Consolas, monospace;
+    font-size: 0.875rem;
+}
+
+.def-path-source {
+    color: #5f5f6a;
+}
+
+/* --- 作成アクション ----------------------------------------------------- */
+
+.def-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 14px 16px;
+    background: #0d0d10;
+    border: 1px solid #1e1e25;
+    border-radius: 10px;
+}
+
+.def-actions-note {
+    flex: 1;
+    min-width: 180px;
+    color: #8c8c98;
+    font-size: 0.875rem;
+    line-height: 1.6;
+}
+
+.def-actions .wa-btn {
+    padding: 7px 14px;
+    font-size: 0.875rem;
+}
+
+/* --- 右カラム ----------------------------------------------------------- */
+
+.def-preview-empty {
+    display: grid;
+    justify-items: center;
+    gap: 10px;
+    padding: 34px 22px;
+    text-align: center;
+}
+
+.def-preview-mark {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    color: #5f5f6a;
+    background: #111116;
+    border: 1px solid #1e1e25;
+    border-radius: 8px;
+}
+
+.def-preview-mark svg {
+    width: 18px;
+    height: 18px;
+}
+
+.def-preview-empty p {
+    margin: 0;
+    max-width: 240px;
+    color: #8c8c98;
+    font-size: 0.875rem;
+    line-height: 1.7;
+}
+
+.def-side-diag ::deep .wa-validation {
+    margin: 0;
+    padding: 12px 14px;
+    line-height: 1.7;
+}
+
+@media (max-width: 720px) {
+    .def-kind {
+        grid-template-columns: 1fr;
+    }
+
+    .def-seg {
+        display: flex;
+        flex-wrap: wrap;
+    }
+}

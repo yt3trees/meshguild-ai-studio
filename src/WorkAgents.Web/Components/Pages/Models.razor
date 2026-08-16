@@ -1,0 +1,389 @@
+@page "/models"
+@using WorkAgents.Core
+@using WorkAgents.Core.Abstractions
+@inject ILlmModelStore ModelStore
+
+<PageTitle>MeshGuild AI Studio | Models</PageTitle>
+
+<section class="models-page">
+    <header class="models-header">
+        <div>
+            <span class="section-kicker">Runtime</span>
+            <h1>LLM models</h1>
+            <p>接続先とデプロイを登録し、エージェントが利用するモデルを管理します。</p>
+        </div>
+        <button type="button" class="primary-button" @onclick="NewModel">＋ Add model</button>
+    </header>
+
+    @if (!string.IsNullOrWhiteSpace(Message))
+    {
+        <div class="notice @(IsError ? "error" : "success")" role="status" data-pw="models-status">@Message</div>
+    }
+
+    <div class="models-layout @(IsEditing ? "editing" : "")">
+        <section class="model-list" aria-label="登録済みモデル">
+            @if (ModelItems.Count == 0)
+            {
+                <div class="empty-state">
+                    <span class="empty-mark" aria-hidden="true">M</span>
+                    <h2>No models configured</h2>
+                    <p>最初のモデルは自動的に既定モデルになります。</p>
+                    <button type="button" class="primary-button" @onclick="NewModel">＋ Add model</button>
+                </div>
+            }
+            else
+            {
+                @foreach (var model in ModelItems)
+                {
+                    <article class="model-row" data-pw="model-row" data-model-name="@model.Name">
+                        <div class="provider-icon" aria-hidden="true">@ProviderIcon(model.Provider)</div>
+                        <div class="model-main">
+                            <div class="model-name">
+                                <strong>@model.Name</strong>
+                                @if (model.IsDefault)
+                                {
+                                    <span class="default-badge">Default</span>
+                                }
+                            </div>
+                            <span>@model.Provider · @model.DeploymentName</span>
+                            <code>@DisplayEndpoint(model)</code>
+                        </div>
+                        <div class="model-security" title="Credential status">
+                            @(SecurityLabel(model))
+                        </div>
+                        <div class="row-actions">
+                            <button type="button" class="icon-button" title="モデルを編集" @onclick="() => EditAsync(model.Id)">✎</button>
+                            <button type="button" class="icon-button danger" title="モデルを削除" @onclick="() => DeleteAsync(model.Id)">×</button>
+                        </div>
+                    </article>
+                }
+            }
+        </section>
+
+        @if (IsEditing)
+        {
+            <aside class="model-editor" aria-label="モデル設定" data-pw="model-editor">
+                <div class="editor-heading">
+                    <div>
+                        <span class="section-kicker">Configuration</span>
+                        <h2>@(string.IsNullOrWhiteSpace(Form.Id) ? "Add model" : "Edit model")</h2>
+                    </div>
+                    <button type="button" class="icon-button" title="閉じる" @onclick="CloseEditor">×</button>
+                </div>
+
+                <form data-pw="model-form" @onsubmit="SaveAsync" @onsubmit:preventDefault>
+                    <label>
+                        <span>Name</span>
+                        <input required maxlength="80" @bind="Form.Name" placeholder="Production GPT-4.1" />
+                    </label>
+
+                    <label>
+                        <span>Provider</span>
+                        <select @bind="Form.Provider">
+                            <option value="@LlmProvider.Foundry">Microsoft Foundry</option>
+                            <option value="@LlmProvider.OpenAI">OpenAI</option>
+                            <option value="@LlmProvider.AmazonBedrock">Amazon Bedrock</option>
+                            <option value="@LlmProvider.OpenRouter">OpenRouter</option>
+                            <option value="@LlmProvider.Anthropic">Anthropic (Claude)</option>
+                            <option value="@LlmProvider.GitHubModels">GitHub Models (Copilot)</option>
+                        </select>
+                    </label>
+
+                    @if (Form.Provider == LlmProvider.Foundry)
+                    {
+                        <label>
+                            <span>Project endpoint</span>
+                            <input required type="url" @bind="Form.ProjectEndpoint" placeholder="https://…services.ai.azure.com/api/projects/…" />
+                        </label>
+                        <p class="field-hint">API keyを入力するとProject endpoint配下のOpenAI互換Responses APIを使います。空欄なら既定のAzure資格情報(<code>DefaultAzureCredential</code>: Azure CLI / マネージドID等)を使います。サービスプリンシパルを使う場合はTenant ID・Client ID・Client secretを入力してください。</p>
+                        <label>
+                            <span>Tenant ID <small>optional · blank uses default Azure credential</small></span>
+                            <input @bind="Form.TenantId" placeholder="00000000-0000-0000-0000-000000000000" />
+                        </label>
+                        <label>
+                            <span>Client (application) ID <small>optional</small></span>
+                            <input @bind="Form.ClientId" placeholder="00000000-0000-0000-0000-000000000000" />
+                        </label>
+                        <label>
+                            <span>Client secret <small>@(Form.HasClientSecret ? "stored · blank keeps current secret" : "optional")</small></span>
+                            <input type="password" autocomplete="new-password" @bind="Form.ClientSecret" placeholder="••••••••••••" />
+                        </label>
+                        <label>
+                            <span>API key <small>@(Form.HasApiKey ? "stored · blank keeps current key" : "optional · blank uses Azure identity")</small></span>
+                            <input type="password" autocomplete="new-password" @bind="Form.ApiKey" placeholder="••••••••••••" />
+                        </label>
+                    }
+                    else if (Form.Provider == LlmProvider.AmazonBedrock)
+                    {
+                        <label>
+                            <span>AWS region</span>
+                            <input required pattern="[a-z0-9-]+" @bind="Form.Endpoint" placeholder="us-east-1" />
+                        </label>
+                        <p class="field-hint">AWS SDKの標準認証チェーン(env / AWS CLI profile / IAM role等)でAmazon Bedrock Converse APIへ接続します。AWS access keyやsecret keyは画面へ入力せず、AWS側の認証設定を使用してください。</p>
+                    }
+                    else if (Form.Provider == LlmProvider.OpenAI)
+                    {
+                        <p class="field-hint">OpenAI公式API(<code>api.openai.com/v1</code>)を使用します。APIキーは <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">OpenAI Platform</a> で発行してください。</p>
+                    }
+                    else if (Form.Provider == LlmProvider.OpenRouter)
+                    {
+                        <p class="field-hint">OpenRouterのOpenAI互換Chat Completions API(<code>openrouter.ai/api/v1</code>)を使用します。モデルIDは <a href="https://openrouter.ai/models" target="_blank" rel="noopener">OpenRouter Models</a> で確認し、APIキーは <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">OpenRouter Keys</a> で発行してください。</p>
+                    }
+                    else if (Form.Provider == LlmProvider.Anthropic)
+                    {
+                        <p class="field-hint">既定エンドポイント(api.anthropic.com)を使用します。APIキーは <a href="https://platform.claude.com/" target="_blank" rel="noopener">Anthropic Console</a> で発行してください。</p>
+                    }
+                    else
+                    {
+                        <label>
+                            <span>Resource endpoint</span>
+                            <input required type="url" @bind="Form.Endpoint"
+                                   placeholder="@(Form.Provider == LlmProvider.GitHubModels ? "https://models.github.ai/inference" : "https://…openai.azure.com")" />
+                        </label>
+                        @if (Form.Provider == LlmProvider.GitHubModels)
+                        {
+                            <p class="field-hint">GitHub Models(Copilot と同じ基盤)は OpenAI 互換の Chat Completions エンドポイントです。APIキーには <code>models: read</code> 権限を持つ GitHub PAT を指定してください。</p>
+                        }
+                    }
+
+                    <label>
+                        <span>Deployment / model name</span>
+                        <input required @bind="Form.DeploymentName"
+                               placeholder="@(Form.Provider switch { LlmProvider.Anthropic => "claude-opus-5", LlmProvider.AmazonBedrock => "anthropic.claude-3-5-sonnet-20241022-v2:0", LlmProvider.OpenRouter or LlmProvider.GitHubModels => "openai/gpt-4.1", _ => "gpt-4.1" })" />
+                    </label>
+
+                    @if (Form.Provider is LlmProvider.AzureOpenAI or LlmProvider.OpenAI)
+                    {
+                        <label>
+                            <span>API</span>
+                            <select @bind="Form.Api">
+                                <option value="ChatCompletion">Chat Completions</option>
+                                <option value="Responses">Responses</option>
+                            </select>
+                        </label>
+                    }
+
+                    @if (Form.Provider == LlmProvider.AzureOpenAI)
+                    {
+                        <label>
+                            <span>API key <small>@(Form.HasApiKey ? "stored · blank keeps current key" : "optional · blank uses Azure identity")</small></span>
+                            <input type="password" autocomplete="new-password" @bind="Form.ApiKey" placeholder="••••••••••••" />
+                        </label>
+                    }
+                    else if (Form.Provider is LlmProvider.Anthropic or LlmProvider.GitHubModels or LlmProvider.OpenAI or LlmProvider.OpenRouter)
+                    {
+                        <label>
+                            <span>API key <small>@(Form.HasApiKey ? "stored · blank keeps current key" : "required")</small></span>
+                            <input required="@(!Form.HasApiKey)" type="password" autocomplete="new-password" @bind="Form.ApiKey" placeholder="••••••••••••" />
+                        </label>
+                    }
+
+                    <label class="check-row">
+                        <input type="checkbox" @bind="Form.IsDefault" />
+                        <span>Use as default model</span>
+                    </label>
+
+                    <details>
+                        <summary>Advanced limits</summary>
+                        <div class="limits-grid">
+                            <label><span>Context window</span><input type="number" min="1" @bind="Form.MaxContextWindowTokens" /></label>
+                            <label><span>Max output</span><input type="number" min="1" @bind="Form.MaxOutputTokens" /></label>
+                            <label><span>Compaction trigger</span><input type="number" min="1" @bind="Form.CompactionTriggerTokens" /></label>
+                            <label><span>Compaction target</span><input type="number" min="1" @bind="Form.CompactionTargetTokens" /></label>
+                            <label><span>Preserved groups</span><input type="number" min="1" @bind="Form.CompactionMinimumPreservedGroups" /></label>
+                        </div>
+                    </details>
+
+                    <div class="editor-actions">
+                        <button type="button" class="secondary-button" @onclick="CloseEditor">Cancel</button>
+                        <button type="submit" class="primary-button" disabled="@IsSaving">@(IsSaving ? "Saving…" : "Save model")</button>
+                    </div>
+                </form>
+            </aside>
+        }
+    </div>
+</section>
+
+@code {
+    private IReadOnlyList<LlmModelSettings> ModelItems = Array.Empty<LlmModelSettings>();
+    private ModelForm Form = new();
+    private bool IsEditing;
+    private bool IsSaving;
+    private bool IsError;
+    private string? Message;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private void NewModel()
+    {
+        Form = new ModelForm();
+        IsEditing = true;
+        Message = null;
+    }
+
+    private async Task EditAsync(string id)
+    {
+        var model = await ModelStore.GetAsync(id);
+        if (model is null)
+        {
+            await ShowErrorAsync("Model was not found.");
+            return;
+        }
+        Form = ModelForm.From(model);
+        IsEditing = true;
+        Message = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        IsSaving = true;
+        Message = null;
+        try
+        {
+            var id = string.IsNullOrWhiteSpace(Form.Id) ? Guid.NewGuid().ToString("N") : Form.Id;
+            await ModelStore.SaveAsync(
+                Form.ToSettings(id),
+                string.IsNullOrWhiteSpace(Form.ApiKey) ? null : Form.ApiKey,
+                string.IsNullOrWhiteSpace(Form.ClientSecret) ? null : Form.ClientSecret);
+            await ReloadAsync();
+            IsEditing = false;
+            IsError = false;
+            Message = "Model settings saved.";
+        }
+        catch (Exception ex)
+        {
+            IsError = true;
+            Message = ex.Message;
+        }
+        finally
+        {
+            IsSaving = false;
+        }
+    }
+
+    private async Task DeleteAsync(string id)
+    {
+        try
+        {
+            await ModelStore.DeleteAsync(id);
+            await ReloadAsync();
+            if (Form.Id == id)
+            {
+                CloseEditor();
+            }
+            IsError = false;
+            Message = "Model deleted.";
+        }
+        catch (Exception ex)
+        {
+            await ShowErrorAsync(ex.Message);
+        }
+    }
+
+    private void CloseEditor() => IsEditing = false;
+
+    private async Task ReloadAsync() => ModelItems = await ModelStore.ListAsync();
+
+    private Task ShowErrorAsync(string message)
+    {
+        IsError = true;
+        Message = message;
+        return Task.CompletedTask;
+    }
+
+    private static string ProviderIcon(LlmProvider provider) => provider switch
+    {
+        LlmProvider.Foundry => "F",
+        LlmProvider.OpenAI => "O",
+        LlmProvider.AmazonBedrock => "B",
+        LlmProvider.OpenRouter => "R",
+        LlmProvider.AzureOpenAI => "Z",
+        LlmProvider.Anthropic => "C",
+        LlmProvider.GitHubModels => "G",
+        _ => "?",
+    };
+
+    private static string DisplayEndpoint(LlmModelSettings model) => model.Provider switch
+    {
+        LlmProvider.Foundry => model.ProjectEndpoint,
+        LlmProvider.OpenAI => "api.openai.com/v1 (既定)",
+        LlmProvider.AmazonBedrock => $"{model.Endpoint} (AWS region)",
+        LlmProvider.OpenRouter => "openrouter.ai/api/v1 (既定)",
+        LlmProvider.Anthropic when string.IsNullOrWhiteSpace(model.Endpoint) => "api.anthropic.com (既定)",
+        _ => model.Endpoint,
+    };
+
+    private static string SecurityLabel(LlmModelSettings model) => model switch
+    {
+        { Provider: LlmProvider.AmazonBedrock } => "AWS credential chain",
+        { HasApiKey: true } => "Key stored",
+        { HasClientSecret: true } => "Service principal",
+        { Provider: LlmProvider.Foundry } => "Azure identity",
+        _ => "No credential",
+    };
+
+    private sealed class ModelForm
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public LlmProvider Provider { get; set; } = LlmProvider.Foundry;
+        public string ProjectEndpoint { get; set; } = "";
+        public string Endpoint { get; set; } = "";
+        public string DeploymentName { get; set; } = "";
+        public string Api { get; set; } = "ChatCompletion";
+        public string ApiKey { get; set; } = "";
+        public bool HasApiKey { get; set; }
+        public string TenantId { get; set; } = "";
+        public string ClientId { get; set; } = "";
+        public string ClientSecret { get; set; } = "";
+        public bool HasClientSecret { get; set; }
+        public bool IsDefault { get; set; }
+        public int MaxContextWindowTokens { get; set; } = 128_000;
+        public int MaxOutputTokens { get; set; } = 4_096;
+        public int CompactionTriggerTokens { get; set; } = 96_000;
+        public int CompactionTargetTokens { get; set; } = 64_000;
+        public int CompactionMinimumPreservedGroups { get; set; } = 8;
+
+        public static ModelForm From(LlmModelSettings model) => new()
+        {
+            Id = model.Id,
+            Name = model.Name,
+            Provider = model.Provider,
+            ProjectEndpoint = model.ProjectEndpoint,
+            Endpoint = model.Endpoint,
+            DeploymentName = model.DeploymentName,
+            Api = model.Api,
+            HasApiKey = model.HasApiKey,
+            TenantId = model.TenantId,
+            ClientId = model.ClientId,
+            HasClientSecret = model.HasClientSecret,
+            IsDefault = model.IsDefault,
+            MaxContextWindowTokens = model.MaxContextWindowTokens,
+            MaxOutputTokens = model.MaxOutputTokens,
+            CompactionTriggerTokens = model.CompactionTriggerTokens,
+            CompactionTargetTokens = model.CompactionTargetTokens,
+            CompactionMinimumPreservedGroups = model.CompactionMinimumPreservedGroups,
+        };
+
+        public LlmModelSettings ToSettings(string id) => new()
+        {
+            Id = id,
+            Name = Name,
+            Provider = Provider,
+            ProjectEndpoint = ProjectEndpoint,
+            Endpoint = Endpoint,
+            DeploymentName = DeploymentName,
+            Api = Api,
+            HasApiKey = HasApiKey,
+            TenantId = TenantId,
+            ClientId = ClientId,
+            HasClientSecret = HasClientSecret,
+            IsDefault = IsDefault,
+            MaxContextWindowTokens = MaxContextWindowTokens,
+            MaxOutputTokens = MaxOutputTokens,
+            CompactionTriggerTokens = CompactionTriggerTokens,
+            CompactionTargetTokens = CompactionTargetTokens,
+            CompactionMinimumPreservedGroups = CompactionMinimumPreservedGroups,
+        };
+    }
+}

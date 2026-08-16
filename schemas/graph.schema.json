@@ -1,0 +1,387 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WorkAgents graph.yaml",
+  "description": "工程をノードとエッジで描いた実行手順書。参照: specs/001-multi-agent-orchestration/contracts/graph-yaml.md",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "name", "nodes", "edges"],
+  "x-ui": { "groups": ["基本", "既定値", "構造"] },
+  "properties": {
+    "version": {
+      "const": 1,
+      "description": "スキーマバージョン。現在は 1 のみ。",
+      "x-ui": { "group": "基本", "order": 0, "widget": "hidden" }
+    },
+    "name": {
+      "type": "string",
+      "description": "グラフ名。フォルダー名 (graphs/<name>) と一致させること。",
+      "x-ui": { "group": "基本", "order": 1, "widget": "text", "placeholder": "release-check" }
+    },
+    "displayName": {
+      "type": "string",
+      "description": "画面に表示するグラフ名。省略時は name を使う。",
+      "x-ui": { "group": "基本", "order": 2, "widget": "text", "defaultHint": "name と同じ" }
+    },
+    "description": {
+      "type": "string",
+      "description": "グラフの目的や処理内容の説明。",
+      "x-ui": { "group": "基本", "order": 3, "widget": "textarea" }
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "team ノードや budget の既定値。",
+      "x-ui": { "group": "既定値", "order": 10 },
+      "properties": {
+        "team": {
+          "type": "string",
+          "description": "kind: team ノードの team を省略したときの既定チーム名。",
+          "x-source": "teams",
+          "x-ui": { "order": 1, "widget": "select", "defaultHint": "既定チームなし" }
+        },
+        "budget": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "グラフの既定予算。ノードごとの設定が優先される。",
+          "x-ui": { "order": 2 },
+          "properties": {
+            "costLimitUsd": {
+              "type": "number",
+              "minimum": 0,
+              "description": "既定のコスト上限 (米ドル)。",
+              "x-ui": { "order": 1, "widget": "number", "step": 0.5, "unit": "USD" }
+            },
+            "timeLimitSeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "既定の実行時間上限 (秒)。",
+              "x-ui": { "order": 2, "widget": "number", "unit": "秒" }
+            }
+          }
+        }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "description": "実行するノード一覧。id はグラフ内で一意にする。",
+      "x-ui": { "group": "構造", "order": 20, "widget": "canvas", "itemLabel": "ノード" },
+      "items": { "$ref": "#/definitions/node" }
+    },
+    "edges": {
+      "type": "array",
+      "description": "ノード間の遷移一覧。from と to だけで記述でき、id は省略時に自動採番される。",
+      "x-ui": { "group": "構造", "order": 21, "widget": "canvas", "itemLabel": "エッジ" },
+      "items": { "$ref": "#/definitions/edge" }
+    },
+    "subgraphs": {
+      "type": "object",
+      "description": "任意。ループ本体などの内部グラフ。キーはサブグラフ ID。",
+      "x-ui": { "group": "構造", "order": 22, "widget": "canvas", "advanced": true },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "名前付きの内部グラフ。loop などから参照する。",
+        "properties": {
+          "nodes": { "type": "array", "description": "サブグラフ内のノード一覧。", "items": { "$ref": "#/definitions/node" } },
+          "edges": { "type": "array", "description": "サブグラフ内のノード間エッジ一覧。", "items": { "$ref": "#/definitions/edge" } }
+        }
+      }
+    },
+    "layout": {
+      "type": "object",
+      "description": "任意。Graph Studio 上の座標。省略したノードはエッジの向きから自動配置される。",
+      "x-ui": { "widget": "hidden", "generated": true },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["x", "y"],
+        "description": "Graph Studio 上でのノード座標。",
+        "properties": {
+          "x": { "type": "number", "description": "横方向の座標。" },
+          "y": { "type": "number", "description": "縦方向の座標。" }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind"],
+      "description": "グラフ上の実行単位または制御単位。kind に応じて使用する項目が異なる。",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "グラフ内で一意なノード ID。edges[].from/to や ${nodes.<id>.output} から参照する。",
+          "x-ui": { "order": 1, "widget": "text", "placeholder": "plan" }
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["agent", "team", "code", "approval", "branch", "parallel", "join", "loop", "subgraph"],
+          "description": "ノード種別。agent はエージェント、team はチーム、code はスクリプト、approval は承認、branch/parallel/join/loop/subgraph は制御用。",
+          "x-ui": {
+            "order": 2,
+            "widget": "select",
+            "enumLabels": {
+              "agent": "agent (エージェント 1 体に任せる)",
+              "team": "team (チームに目標を渡す)",
+              "code": "code (スクリプトを実行する)",
+              "approval": "approval (人の承認を待つ)",
+              "branch": "branch (条件で経路を分ける)",
+              "parallel": "parallel (複数経路へ同時に流す)",
+              "join": "join (並列経路を合流させる)",
+              "loop": "loop (条件を満たすまで繰り返す)",
+              "subgraph": "subgraph (別のグラフを呼ぶ)"
+            }
+          }
+        },
+        "agent": {
+          "type": "string",
+          "description": "kind: agent のエージェント名。",
+          "x-source": "agents",
+          "x-ui": { "order": 10, "widget": "select", "showWhen": { "kind": ["agent"] }, "required": true }
+        },
+        "team": {
+          "type": "string",
+          "description": "kind: team のチーム名。省略時 defaults.team。",
+          "x-source": "teams",
+          "x-ui": { "order": 10, "widget": "select", "showWhen": { "kind": ["team"] }, "defaultHint": "defaults.team" }
+        },
+        "input": {
+          "type": "string",
+          "description": "kind: agent への入力。${...} 参照可。",
+          "x-ui": { "order": 11, "widget": "textarea", "showWhen": { "kind": ["agent"] }, "supportsReferences": true, "placeholder": "${mission.goal} をレビューして" }
+        },
+        "goal": {
+          "type": "string",
+          "description": "kind: team への目標。${...} 参照可。",
+          "x-ui": { "order": 11, "widget": "textarea", "showWhen": { "kind": ["team"] }, "supportsReferences": true, "placeholder": "${mission.goal}" }
+        },
+        "body": {
+          "type": "string",
+          "description": "kind: loop のループ本体サブグラフ ID (subgraphs 配下)。",
+          "x-source": "subgraphs",
+          "x-ui": { "order": 10, "widget": "select", "showWhen": { "kind": ["loop"] }, "required": true }
+        },
+        "title": {
+          "type": "string",
+          "description": "kind: approval の承認タイトル。",
+          "x-ui": { "order": 10, "widget": "text", "showWhen": { "kind": ["approval"] }, "placeholder": "本番反映の承認" }
+        },
+        "summary": {
+          "type": "string",
+          "description": "kind: approval の承認要約。${...} 参照可。",
+          "x-ui": { "order": 11, "widget": "textarea", "showWhen": { "kind": ["approval"] }, "supportsReferences": true }
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "kind: approval のタイムアウト秒。省略時 900。",
+          "x-ui": { "order": 12, "widget": "number", "showWhen": { "kind": ["approval"] }, "defaultHint": "900", "unit": "秒" }
+        },
+        "codeFile": {
+          "type": "string",
+          "description": "kind: code のスクリプトパス (グラフフォルダーからの相対)。拡張子は .csx にすること (graphs 配下の .cs はビルド出力へコピーされない)。",
+          "x-ui": { "order": 10, "widget": "text", "showWhen": { "kind": ["code"] }, "required": true, "placeholder": "scripts/summarize.csx" }
+        },
+        "graph": {
+          "type": "string",
+          "description": "kind: subgraph が参照する graphs/<name>。",
+          "x-source": "graphs",
+          "x-ui": { "order": 10, "widget": "select", "showWhen": { "kind": ["subgraph"] }, "required": true }
+        },
+        "joinPolicy": {
+          "type": "string",
+          "enum": ["all", "any"],
+          "description": "kind: join の合流方針。",
+          "x-ui": {
+            "order": 10,
+            "widget": "select",
+            "showWhen": { "kind": ["join"] },
+            "required": true,
+            "enumLabels": { "all": "all (すべての入力が揃うまで待つ)", "any": "any (最初の 1 件で先へ進む)" }
+          }
+        },
+        "onPartialFailure": {
+          "type": "string",
+          "enum": ["fail", "continue", "alternate"],
+          "description": "kind: join で一部失敗したときの扱い。",
+          "x-ui": {
+            "order": 11,
+            "widget": "select",
+            "showWhen": { "kind": ["join"] },
+            "enumLabels": {
+              "fail": "fail (グラフ全体を失敗にする)",
+              "continue": "continue (成功した分だけで先へ進む)",
+              "alternate": "alternate (別のノードへ迂回する)"
+            }
+          }
+        },
+        "alternate": {
+          "type": "string",
+          "description": "onPartialFailure: alternate のときの遷移先ノード ID。",
+          "x-source": "nodes",
+          "x-ui": { "order": 12, "widget": "select", "showWhen": { "kind": ["join"], "onPartialFailure": ["alternate"] }, "required": true }
+        },
+        "stop": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "kind: loop の停止条件。いずれか 1 つ以上の指定が必要。",
+          "x-ui": { "order": 20, "showWhen": { "kind": ["loop"] }, "required": true },
+          "properties": {
+            "maxIterations": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "description": "ループ反復回数の上限。省略時は 10。",
+              "x-ui": { "order": 1, "widget": "number", "defaultHint": "10", "unit": "回" }
+            },
+            "costLimitUsd": {
+              "type": "number",
+              "minimum": 0,
+              "description": "累積コストがこの値以上になったら停止する (米ドル)。",
+              "x-ui": { "order": 2, "widget": "number", "step": 0.5, "unit": "USD" }
+            },
+            "timeLimitSeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "累積実行時間がこの値以上になったら停止する (秒)。",
+              "x-ui": { "order": 3, "widget": "number", "unit": "秒" }
+            },
+            "scoreThreshold": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "評価スコアがこの値以上になったら停止する。0.0 以上 1.0 以下。",
+              "x-ui": { "order": 4, "widget": "number", "step": 0.05, "placeholder": "0.8" }
+            }
+          },
+          "anyOf": [
+            { "required": ["maxIterations"] },
+            { "required": ["costLimitUsd"] },
+            { "required": ["timeLimitSeconds"] },
+            { "required": ["scoreThreshold"] }
+          ]
+        },
+        "evaluator": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "kind: loop の評価者設定。",
+          "x-ui": { "order": 21, "showWhen": { "kind": ["loop"] } },
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": ["deterministic", "agent"],
+              "description": "評価方法。deterministic は code ノードの指標、agent はエージェントによる評価。",
+              "x-ui": {
+                "order": 1,
+                "widget": "select",
+                "enumLabels": {
+                  "deterministic": "deterministic (code ノードが出す指標で判定)",
+                  "agent": "agent (エージェントが採点する)"
+                }
+              }
+            },
+            "node": {
+              "type": "string",
+              "description": "kind: deterministic のとき、指標を出す code ノード ID。",
+              "x-source": "code-nodes",
+              "x-ui": { "order": 2, "widget": "select", "showWhen": { "kind": ["deterministic"] } }
+            },
+            "agent": {
+              "type": "string",
+              "description": "kind: agent のとき評価に使うエージェント名。",
+              "x-source": "agents",
+              "x-ui": { "order": 3, "widget": "select", "showWhen": { "kind": ["agent"] } }
+            },
+            "metrics": {
+              "type": "array",
+              "description": "決定的評価で比較する指標。",
+              "x-ui": { "order": 4, "widget": "table", "itemLabel": "指標", "showWhen": { "kind": ["deterministic"] } },
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "target"],
+                "properties": {
+                  "name": { "type": "string", "description": "評価対象の指標名。", "x-ui": { "order": 1, "widget": "text" } },
+                  "target": { "type": "number", "description": "指標の目標値。", "x-ui": { "order": 2, "widget": "number" } },
+                  "direction": {
+                    "type": "string",
+                    "enum": ["gte", "lte"],
+                    "description": "既定 gte。",
+                    "x-ui": {
+                      "order": 3,
+                      "widget": "select",
+                      "defaultHint": "gte",
+                      "enumLabels": { "gte": "gte (目標値以上で合格)", "lte": "lte (目標値以下で合格)" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "next": {
+          "type": "array",
+          "items": { "type": "string", "description": "表示用の次ノード ID。実行エンジンは参照しない。", "x-source": "nodes" },
+          "description": "任意。表示専用でどのエンジンからも参照されない。省略してよい。",
+          "x-ui": { "order": 90, "widget": "multiselect", "advanced": true, "deprecated": true }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "loop" } }, "required": ["kind"] },
+          "then": { "required": ["stop"] }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "join" } }, "required": ["kind"] },
+          "then": { "required": ["joinPolicy"] }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "code" } }, "required": ["kind"] },
+          "then": { "required": ["codeFile"] }
+        },
+        {
+          "if": { "properties": { "onPartialFailure": { "const": "alternate" } }, "required": ["onPartialFailure"] },
+          "then": { "required": ["alternate"] }
+        }
+      ]
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to"],
+      "description": "ノード間の遷移。",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "省略可。省略時は '<from>-to-<to>' を自動採番する。",
+          "x-ui": { "order": 1, "widget": "text", "defaultHint": "<from>-to-<to>", "advanced": true }
+        },
+        "from": {
+          "type": "string",
+          "description": "遷移元ノード ID。",
+          "x-source": "nodes",
+          "x-ui": { "order": 2, "widget": "select" }
+        },
+        "to": {
+          "type": "string",
+          "description": "遷移先ノード ID。",
+          "x-source": "nodes",
+          "x-ui": { "order": 3, "widget": "select" }
+        },
+        "condition": {
+          "type": "string",
+          "description": "任意。真のときだけこのエッジを通る。比較/論理演算と ${...} 参照のみ許可。",
+          "x-ui": { "order": 4, "widget": "text", "supportsReferences": true, "placeholder": "${nodes.check.output} == 'ok'", "defaultHint": "常に通る" }
+        },
+        "loopBack": {
+          "type": "boolean",
+          "description": "true のとき、後退エッジ (ループ) として明示する。省略時 false。",
+          "x-ui": { "order": 5, "widget": "switch", "defaultHint": "false" }
+        }
+      }
+    }
+  }
+}

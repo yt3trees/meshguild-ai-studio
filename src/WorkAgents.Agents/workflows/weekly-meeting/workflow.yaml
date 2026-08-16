@@ -1,0 +1,34 @@
+kind: Workflow
+name: weekly-meeting
+displayName: Weekly Meeting Pipeline
+description: |
+  議事録テキストを meeting-agent で整形 → C# スクリプト(`scripts/package.cs`)で成果物名を付与 →
+  Web の承認インボックスで HITL 確認(`approve` ステップ・デスクトップ通知) →
+  承認後 C# スクリプト(`scripts/save.cs`)でファイル保存、
+  という Dify ライクな連鎖サンプル。コードは .cs ファイルに分離して .yaml から `codeFile:` で呼び出す。
+schedule:
+  cron: "0 9 * * 1"   # 毎週月曜 09:00(Local 時刻)。手動 Run now も可。
+steps:
+  - name: minutes
+    kind: agent
+    agent: meeting-agent
+    input: |
+      以下を議事録として整形してください。見出し・発言者・決定事項を整理。
+      ${workflow.input}
+
+  - name: package
+    kind: code
+    codeFile: scripts/package.cs
+
+  - name: confirm
+    kind: approve
+    title: 議事録の保存確認
+    summary: |
+      以下の議事録を保存します。対象: ${steps.package.output.title}
+      内容:
+      ${steps.package.output.body}
+    timeoutMinutes: 15
+
+  - name: save
+    kind: code
+    codeFile: scripts/save.cs

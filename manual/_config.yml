@@ -1,0 +1,34 @@
+title: MeshGuild AI Studio マニュアル
+description: MeshGuild AI Studio(WorkAgents)の使い方をまとめたマニュアルサイトです。
+lang: ja
+
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+highlighter: rouge
+
+permalink: /:categories/:title/
+
+collections:
+  pages:
+    output: true
+    permalink: /pages/:name/
+
+defaults:
+  - scope:
+      path: ""
+      type: pages
+    values:
+      layout: page
+  - scope:
+      path: "index.md"
+    values:
+      layout: default
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - README.md
+  - vendor
+  - node_modules

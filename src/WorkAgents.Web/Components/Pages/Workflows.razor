@@ -1,0 +1,412 @@
+@page "/workflows"
+@using WorkAgents.Agents
+@using WorkAgents.Core
+@using WorkAgents.Core.Abstractions
+@using WorkAgents.Infrastructure.Execution
+@inject IAgentRegistry AgentRegistry
+@inject IWorkflowRegistry WorkflowRegistry
+@inject IScheduleStore ScheduleStore
+
+<PageTitle>MeshGuild AI Studio | Workflows</PageTitle>
+
+<section class="approvals-page">
+    <header class="page-header">
+        <div class="title-block">
+            <span class="title-icon" aria-hidden="true"> ⌁</span>
+            <div>
+                <h1>Workflows</h1>
+                <span>定義・スケジュール・手動実行</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="error-banner" role="status">
+        旧 workflow.yaml は読み込み専用です。実行前に Host で
+        <code>migrate-workflows --dry-run</code> を確認し、graph.yaml へ移行してください。
+    </div>
+
+    <div class="page-tabs" role="tablist" aria-label="ワークフロー一覧">
+        <button type="button" class="page-tab active" role="tab" aria-selected="true">Workflows</button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Error))
+    {
+        <div class="error-banner" role="alert">@Error</div>
+    }
+
+    <div class="approval-workspace">
+        <aside class="approval-list-pane" aria-label="ワークフロー一覧">
+            <div class="pane-heading">
+                <span>Workflows</span>
+                <span class="count-badge">@workflows.Count</span>
+            </div>
+
+            @if (workflows.Count == 0)
+            {
+                <div class="empty-list">
+                    <span class="empty-icon" aria-hidden="true">⌁</span>
+                    <strong>No workflows</strong>
+                    <span><code>src\WorkAgents.Agents\workflows\&lt;name&gt;\workflow.yaml</code> を置いて再起動してください。</span>
+                </div>
+            }
+            else
+            {
+                <div class="approval-list" aria-live="polite">
+                    @foreach (var wf in workflows)
+                    {
+                        <button type="button"
+                                class="approval-row @(selected?.Name == wf.Name ? "selected" : null)"
+                            disabled="@IsRunning"
+                            @onclick="() => SelectWorkflow(wf)" @key="wf.Name">
+                            <span class="row-status @(wf.HasSchedule ? "scheduled" : null)" aria-hidden="true"></span>
+                            <span class="row-content">
+                                <span class="row-title">@wf.DisplayName</span>
+                                <span class="row-run">@wf.Name · @(wf.StepCount) step(s)</span>
+                                @if (wf.HasSchedule)
+                                {
+                                    <span class="row-run">cron: <code>@wf.ScheduleCron</code></span>
+                                }
+                            </span>
+                            <span class="row-chevron" aria-hidden="true">›</span>
+                        </button>
+                    }
+                </div>
+            }
+        </aside>
+
+        <section class="approval-detail-pane" aria-label="ワークフロー詳細">
+            @if (selected is null)
+            {
+                <div class="detail-empty">
+                    <span class="detail-empty-icon" aria-hidden="true">□</span>
+                    <h2>Select a workflow</h2>
+                    <p>左の一覧から選択すると、定義詳細が表示されます。</p>
+                </div>
+            }
+            else
+            {
+                <div class="detail-header">
+                    <div>
+                        <div class="eyebrow">Workflow</div>
+                        <h2>@selected.DisplayName</h2>
+                    </div>
+                    <span class="status-badge">@(selected.HasSchedule ? "scheduled" : "manual only")</span>
+                </div>
+
+                <div class="detail-content">
+                    <dl class="metadata-grid">
+                        <div>
+                            <dt>Name</dt>
+                            <dd><code>@selected.Name</code></dd>
+                        </div>
+                        <div>
+                            <dt>Steps</dt>
+                            <dd>@selected.StepCount</dd>
+                        </div>
+                        @if (selected.HasSchedule)
+                        {
+                            <div>
+                                <dt>Cron</dt>
+                                <dd><code>@selected.ScheduleCron</code></dd>
+                            </div>
+                        }
+                    </dl>
+
+                    <div class="arguments-section">
+                        <div class="section-label">Description</div>
+                        <pre>@selected.Description</pre>
+                    </div>
+
+                    <div class="arguments-section">
+                        <label class="section-label" for="workflowInput">Input (workflow.input)</label>
+                        <textarea id="workflowInput" class="workflow-input" rows="5"
+                                  @bind="WorkflowInput" disabled="@IsBusy"
+                                  placeholder="Workflowへ渡す入力を記入してください。"></textarea>
+                    </div>
+
+                    <section class="schedule-section" aria-labelledby="schedule-heading">
+                        <div class="schedule-heading">
+                            <div>
+                                <div class="section-label">Schedule</div>
+                                <h3 id="schedule-heading">定期実行設定</h3>
+                            </div>
+                            <span class="status-badge @(selectedSchedule?.Enabled == false ? "disabled" : null)">
+                                @ScheduleStatus
+                            </span>
+                        </div>
+
+                        <div class="schedule-fields">
+                            <label for="scheduleCron">
+                                <span class="section-label">Cron</span>
+                                <input id="scheduleCron" class="schedule-input" @bind="ScheduleCron"
+                                       disabled="@IsBusy" placeholder="0 9 * * 1" />
+                            </label>
+                            <dl class="schedule-times">
+                                <div>
+                                    <dt>Last run</dt>
+                                    <dd>@FormatScheduleTime(selectedSchedule?.LastRunAt)</dd>
+                                </div>
+                                <div>
+                                    <dt>Next run</dt>
+                                    <dd>@FormatScheduleTime(selectedSchedule?.NextRunAt)</dd>
+                                </div>
+                            </dl>
+                        </div>
+                    </section>
+
+                    @if (workflowFull is null)
+                    {
+                        <div class="error-banner" role="alert">定義を再取得できませんでした。</div>
+                    }
+                    else
+                    {
+                        <div class="arguments-section">
+                            <div class="section-label">Steps</div>
+                            <ol style="margin:0; padding-left:1.5em;">
+                                @foreach (var step in workflowFull.Steps)
+                                {
+                                    <li>
+                                        <strong>@step.Name</strong>
+                                        <span class="status-badge">@step.Kind</span>
+                                        @if (step.Kind == WorkflowStepKind.Agent)
+                                        {
+                                            <span> → agent: <code>@step.Agent</code></span>
+                                            <pre style="margin:.25em 0 .75em;">@step.Input</pre>
+                                        }
+                                        else if (step.Kind == WorkflowStepKind.Code)
+                                        {
+                                            <pre style="margin:.25em 0 .75em;">@step.Code</pre>
+                                        }
+                                        else if (step.Kind == WorkflowStepKind.Approve)
+                                        {
+                                            <div>title: <strong>@step.Title</strong></div>
+                                            <div>timeout: @(step.Timeout?.TotalMinutes.ToString() ?? "default") min</div>
+                                            <pre style="margin:.25em 0 .75em;">@step.Summary</pre>
+                                        }
+                                    </li>
+                                }
+                            </ol>
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrWhiteSpace(RunResult))
+                    {
+                        <div class="arguments-section" aria-live="polite">
+                            <div class="section-label">Result</div>
+                            <pre>@RunResult</pre>
+                        </div>
+                    }
+                </div>
+
+                <footer class="decision-bar">
+                    <span>@RunAvailabilityMessage</span>
+                    <div class="decision-actions">
+                        <button type="button" class="btn btn-outline-secondary"
+                                disabled="@(IsBusy || selectedSchedule is null)" @onclick="ToggleScheduleAsync">
+                            @(selectedSchedule?.Enabled == true ? "Disable" : "Enable")
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary"
+                                disabled="@(IsBusy || !selected.HasSchedule)" @onclick="UseWorkflowDefaultCronAsync">
+                            Use YAML cron
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary"
+                                disabled="@IsBusy" @onclick="SaveScheduleAsync">
+                            @(IsSaving ? "Saving..." : "Save schedule")
+                        </button>
+                        <button type="button" class="btn btn-primary"
+                                disabled="@(!CanRun)" @onclick="RunNowAsync">
+                            @(IsRunning ? "Running..." : "Run now")
+                        </button>
+                    </div>
+                </footer>
+            }
+        </section>
+    </div>
+</section>
+
+@code {
+    private IReadOnlyList<WorkflowView> workflows = Array.Empty<WorkflowView>();
+    private IReadOnlyList<ScheduleDefinition> schedules = Array.Empty<ScheduleDefinition>();
+    private WorkflowView? selected;
+    private WorkflowDefinition? workflowFull;
+    private ScheduleDefinition? selectedSchedule;
+    private string WorkflowInput = string.Empty;
+    private string ScheduleCron = string.Empty;
+    private string? RunResult;
+    private string? Error;
+    private bool IsRunning;
+    private bool IsSaving;
+
+    private bool IsBusy => IsRunning || IsSaving;
+
+    private bool HasApprovalStep =>
+        workflowFull?.Steps.Any(step => step.Kind == WorkflowStepKind.Approve) == true;
+
+    private bool CanRun => selected is not null && !IsBusy && !HasApprovalStep;
+
+    private string ScheduleStatus => selectedSchedule is null
+        ? "not configured"
+        : selectedSchedule.Enabled ? "enabled" : "disabled";
+
+    private string RunAvailabilityMessage => HasApprovalStep
+        ? "承認ステップを含むため、非同期 run 経路から実行してください。"
+        : "この workflow を同期実行します。";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            workflows = WorkflowRegistry.ListWorkflows();
+            schedules = await ScheduleStore.ListAsync();
+            SelectWorkflow(workflows.FirstOrDefault());
+        }
+        catch (Exception ex)
+        {
+            Error = $"ワークフロー一覧の読み込みに失敗しました: {ex.Message}";
+        }
+    }
+
+    private void SelectWorkflow(WorkflowView? workflow)
+    {
+        selected = workflow;
+        workflowFull = workflow is null ? null : WorkflowRegistry.GetWorkflow(workflow.Name);
+        selectedSchedule = workflow is null
+            ? null
+            : schedules.FirstOrDefault(schedule => schedule.WorkflowName == workflow.Name);
+        WorkflowInput = selectedSchedule?.Input ?? string.Empty;
+        ScheduleCron = selectedSchedule?.Cron ?? workflow?.ScheduleCron ?? string.Empty;
+        RunResult = null;
+        Error = null;
+    }
+
+    private async Task SaveScheduleAsync()
+    {
+        if (selected is null)
+        {
+            return;
+        }
+
+        IsSaving = true;
+        Error = null;
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            var cron = NormalizeCron(ScheduleCron);
+            var schedule = new ScheduleDefinition
+            {
+                Name = selectedSchedule?.Name ?? selected.Name,
+                WorkflowName = selected.Name,
+                Input = WorkflowInput,
+                Cron = cron,
+                Enabled = selectedSchedule?.Enabled ?? true,
+                LastRunAt = selectedSchedule?.LastRunAt,
+                NextRunAt = CalculateNextRunAt(cron, now),
+                CreatedAt = selectedSchedule?.CreatedAt ?? now,
+                UpdatedAt = now,
+            };
+            await ScheduleStore.UpsertAsync(schedule);
+            await ReloadSchedulesAsync();
+        }
+        catch (Exception ex)
+        {
+            Error = $"スケジュールの保存に失敗しました: {ex.Message}";
+        }
+        finally
+        {
+            IsSaving = false;
+        }
+    }
+
+    private async Task ToggleScheduleAsync()
+    {
+        if (selectedSchedule is null)
+        {
+            return;
+        }
+
+        IsSaving = true;
+        Error = null;
+        try
+        {
+            var enabled = !selectedSchedule.Enabled;
+            var now = DateTimeOffset.UtcNow;
+            await ScheduleStore.UpsertAsync(selectedSchedule with
+            {
+                Enabled = enabled,
+                NextRunAt = enabled && selectedSchedule.NextRunAt is null
+                    ? CalculateNextRunAt(selectedSchedule.Cron, now)
+                    : selectedSchedule.NextRunAt,
+                UpdatedAt = now,
+            });
+            await ReloadSchedulesAsync();
+        }
+        catch (Exception ex)
+        {
+            Error = $"スケジュールの有効化切替に失敗しました: {ex.Message}";
+        }
+        finally
+        {
+            IsSaving = false;
+        }
+    }
+
+    private async Task UseWorkflowDefaultCronAsync()
+    {
+        if (selected is null || !selected.HasSchedule)
+        {
+            return;
+        }
+
+        ScheduleCron = selected.ScheduleCron ?? string.Empty;
+        await SaveScheduleAsync();
+    }
+
+    private async Task ReloadSchedulesAsync()
+    {
+        schedules = await ScheduleStore.ListAsync();
+        selectedSchedule = selected is null
+            ? null
+            : schedules.FirstOrDefault(schedule => schedule.WorkflowName == selected.Name);
+    }
+
+    private async Task RunNowAsync()
+    {
+        if (!CanRun || selected is null)
+        {
+            return;
+        }
+
+        IsRunning = true;
+        RunResult = null;
+        Error = null;
+        try
+        {
+            RunResult = await AgentRegistry.RunAsync(selected.Name, WorkflowInput);
+        }
+        catch (Exception ex)
+        {
+            Error = $"Run now に失敗しました: {ex.Message}";
+        }
+        finally
+        {
+            IsRunning = false;
+        }
+    }
+
+    private static string FormatScheduleTime(DateTimeOffset? value) =>
+        value?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "—";
+
+    private static string? NormalizeCron(string? cron) =>
+        string.IsNullOrWhiteSpace(cron) ? null : cron.Trim();
+
+    private static DateTimeOffset? CalculateNextRunAt(string? cron, DateTimeOffset now)
+    {
+        var nextRunAt = ScheduleCalculator.GetNextOccurrence(cron, now, TimeZoneInfo.Local);
+        if (cron is not null && nextRunAt is null)
+        {
+            throw new InvalidOperationException("Cron に一致する次回実行日時を計算できませんでした。");
+        }
+
+        return nextRunAt;
+    }
+}

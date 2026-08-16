@@ -1,0 +1,31 @@
+---
+---
+
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
+
+@import "theme";
+@import "layout";
+
+.mermaid {
+  margin: 20px 0;
+  padding: 14px;
+  overflow-x: auto;
+  background: var(--wa-panel-2);
+  border: 1px solid var(--wa-line);
+  border-radius: var(--wa-radius-sm);
+  text-align: center;
+}
+
+.mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.wa-panel img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 18px 0;
+  border: 1px solid var(--wa-line);
+  border-radius: var(--wa-radius-sm);
+}
